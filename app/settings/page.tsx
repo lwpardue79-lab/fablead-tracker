@@ -1,21 +1,33 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui";
-import { useFabLeadStore } from "@/lib/local-store";
+import { defaultWorkspaceSettings, useFabLeadStore } from "@/lib/local-store";
+import { WorkspaceSettings } from "@/lib/types";
 
 export default function Settings() {
-  const { resetPilotData } = useFabLeadStore();
+  const { resetPilotData, updateWorkspaceSettings, workspaceSettings } = useFabLeadStore();
+  const [settings, setSettings] = useState<WorkspaceSettings>(defaultWorkspaceSettings);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setSettings(workspaceSettings);
+  }, [workspaceSettings]);
+
+  function updateField<K extends keyof WorkspaceSettings>(key: K, value: WorkspaceSettings[K]) {
+    setSettings((current) => ({ ...current, [key]: value }));
+  }
 
   function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("Settings saved for this pilot session.");
+    updateWorkspaceSettings(settings);
+    setMessage(`${settings.companyName} workspace settings saved.`);
   }
 
   function resetData() {
     resetPilotData();
-    setMessage("Pilot data reset to the verified Kansas City seed list.");
+    setSettings(defaultWorkspaceSettings);
+    setMessage("Pilot data and workspace settings reset to Shawnee Steel & Welding.");
   }
 
   return (
@@ -26,11 +38,11 @@ export default function Settings() {
         <form onSubmit={saveSettings} className="card p-6">
           <h2 className="font-serif text-xl font-semibold">Business details</h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-600">Company name<input className="field mt-1.5" defaultValue="Acme Fabrication" /></label>
-            <label className="text-xs font-semibold text-slate-600">Your name<input className="field mt-1.5" defaultValue="Luke Pardue" /></label>
-            <label className="text-xs font-semibold text-slate-600 sm:col-span-2">Base market<input className="field mt-1.5" defaultValue="Kansas City Metro" /></label>
-            <label className="text-xs font-semibold text-slate-600">Coverage<select className="field mt-1.5"><option>Missouri + Kansas</option><option>United States</option></select></label>
-            <label className="text-xs font-semibold text-slate-600">Ideal service radius<select className="field mt-1.5"><option>100 miles</option><option>50 miles</option><option>250 miles</option></select></label>
+            <label className="text-xs font-semibold text-slate-600">Company name<input className="field mt-1.5" value={settings.companyName} onChange={(event) => updateField("companyName", event.target.value)} /></label>
+            <label className="text-xs font-semibold text-slate-600">Your name<input className="field mt-1.5" value={settings.userName} onChange={(event) => updateField("userName", event.target.value)} /></label>
+            <label className="text-xs font-semibold text-slate-600 sm:col-span-2">Base market<input className="field mt-1.5" value={settings.baseMarket} onChange={(event) => updateField("baseMarket", event.target.value)} /></label>
+            <label className="text-xs font-semibold text-slate-600">Coverage<select className="field mt-1.5" value={settings.coverage} onChange={(event) => updateField("coverage", event.target.value)}><option>Missouri + Kansas</option><option>United States</option></select></label>
+            <label className="text-xs font-semibold text-slate-600">Ideal service radius<select className="field mt-1.5" value={settings.serviceRadius} onChange={(event) => updateField("serviceRadius", event.target.value)}><option>100 miles</option><option>50 miles</option><option>250 miles</option></select></label>
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             <button className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Save settings</button>

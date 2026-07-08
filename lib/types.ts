@@ -32,3 +32,11 @@ export type FollowUp = {
   priority: string;
   status: string;
 };
+
+export type WorkspaceSettings = {
+  companyName: string;
+  userName: string;
+  baseMarket: string;
+  coverage: string;
+  serviceRadius: string;
+};

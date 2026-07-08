@@ -2,13 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { bids as seedBids, companies as seedCompanies, contacts as seedContacts, followUps as seedFollowUps } from "./demo-data";
-import { Bid, Company, Contact, FollowUp } from "./types";
+import { Bid, Company, Contact, FollowUp, WorkspaceSettings } from "./types";
+
+export const defaultWorkspaceSettings: WorkspaceSettings = {
+  companyName: "Shawnee Steel & Welding",
+  userName: "Luke Pardue",
+  baseMarket: "Kansas City Metro",
+  coverage: "Missouri + Kansas",
+  serviceRadius: "100 miles",
+};
 
 const keys = {
   companies: "fablead_companies_v1",
   contacts: "fablead_contacts_v1",
   bids: "fablead_bids_v1",
   followUps: "fablead_followups_v1",
+  workspaceSettings: "fablead_workspace_settings_v1",
 };
 
 function readLocal<T>(key: string, fallback: T): T {
@@ -35,6 +44,7 @@ export function useFabLeadStore() {
   const [contacts, setContacts] = useState<Contact[]>(seedContacts);
   const [bids, setBids] = useState<Bid[]>(seedBids);
   const [followUps, setFollowUps] = useState<FollowUp[]>(seedFollowUps);
+  const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(defaultWorkspaceSettings);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -42,6 +52,7 @@ export function useFabLeadStore() {
     setContacts(readLocal(keys.contacts, seedContacts));
     setBids(readLocal(keys.bids, seedBids));
     setFollowUps(readLocal(keys.followUps, seedFollowUps));
+    setWorkspaceSettings(readLocal(keys.workspaceSettings, defaultWorkspaceSettings));
     setLoaded(true);
   }, []);
 
@@ -49,12 +60,14 @@ export function useFabLeadStore() {
   useEffect(() => { if (loaded) writeLocal(keys.contacts, contacts); }, [contacts, loaded]);
   useEffect(() => { if (loaded) writeLocal(keys.bids, bids); }, [bids, loaded]);
   useEffect(() => { if (loaded) writeLocal(keys.followUps, followUps); }, [followUps, loaded]);
+  useEffect(() => { if (loaded) writeLocal(keys.workspaceSettings, workspaceSettings); }, [workspaceSettings, loaded]);
 
   return useMemo(() => ({
     companies,
     contacts,
     bids,
     followUps,
+    workspaceSettings,
     addCompany(input: Omit<Company, "company_id">) {
       const company = { ...input, company_id: makeId("company") };
       setCompanies((current) => [company, ...current]);
@@ -81,13 +94,17 @@ export function useFabLeadStore() {
     updateFollowUps(next: FollowUp[]) {
       setFollowUps(next);
     },
+    updateWorkspaceSettings(next: WorkspaceSettings) {
+      setWorkspaceSettings(next);
+    },
     resetPilotData() {
       setCompanies(seedCompanies);
       setContacts(seedContacts);
       setBids(seedBids);
       setFollowUps(seedFollowUps);
+      setWorkspaceSettings(defaultWorkspaceSettings);
     },
-  }), [bids, companies, contacts, followUps]);
+  }), [bids, companies, contacts, followUps, workspaceSettings]);
 }
 
 export function parseCsv(text: string): Record<string, string>[] {
