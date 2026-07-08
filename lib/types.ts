@@ -4,6 +4,7 @@ export type Company = {
   public_phone?: string; public_email?: string; website?: string; notes?: string;
   prequalification_url?: string; bid_portal_url?: string; source_url?: string;
   invite_list_status?: string; typical_scopes?: string; data_verified_at?: string;
+  estimating_email?: string; next_action?: string; last_contacted_date?: string;
 };
 
 export type Contact = {
@@ -39,4 +40,27 @@ export type WorkspaceSettings = {
   baseMarket: string;
   coverage: string;
   serviceRadius: string;
+};
+
+export type ShopProfile = {
+  shopName: string;
+  serviceRadius: string;
+  targetCitiesStates: string;
+  tradeScopes: string[];
+  idealProjectTypes: string;
+  minimumProjectSize: number;
+  maximumProjectSize: number;
+  insuranceCertificationNotes: string;
+  primaryContact: string;
+};
+
+export type OutreachLog = {
+  id: string;
+  company: string;
+  contact: string;
+  type: "Call" | "Email" | "Meeting" | "Portal Registration" | "Note";
+  date: string;
+  result: string;
+  notes: string;
+  nextFollowUpDate?: string;
 };

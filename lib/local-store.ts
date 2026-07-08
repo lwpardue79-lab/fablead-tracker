@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { bids as seedBids, companies as seedCompanies, contacts as seedContacts, followUps as seedFollowUps } from "./demo-data";
 import { calculateLeadScore } from "./lead-scoring";
-import { Bid, Company, Contact, FollowUp, WorkspaceSettings } from "./types";
+import { createClient } from "./supabase/client";
+import { Bid, Company, Contact, FollowUp, OutreachLog, ShopProfile, WorkspaceSettings } from "./types";
 
 export const defaultWorkspaceSettings: WorkspaceSettings = {
   companyName: "Shawnee Steel & Welding",
@@ -13,12 +14,26 @@ export const defaultWorkspaceSettings: WorkspaceSettings = {
   serviceRadius: "100 miles",
 };
 
+export const defaultShopProfile: ShopProfile = {
+  shopName: "Shawnee Steel & Welding",
+  serviceRadius: "100 miles",
+  targetCitiesStates: "Shawnee KS, Kansas City Metro, Overland Park KS, Olathe KS, Kansas City MO, Lee's Summit MO",
+  tradeScopes: ["Structural steel", "Miscellaneous metals", "Stairs", "Rails", "Welding", "Fabrication", "Field installation"],
+  idealProjectTypes: "Commercial buildings, public works, schools, industrial repairs, stairs, rails, structural steel, and miscellaneous metals.",
+  minimumProjectSize: 5000,
+  maximumProjectSize: 250000,
+  insuranceCertificationNotes: "Add insurance, W-9, safety, bonding, certifications, and welding procedure notes here.",
+  primaryContact: "Luke Pardue",
+};
+
 const keys = {
   companies: "fablead_companies_v1",
   contacts: "fablead_contacts_v1",
   bids: "fablead_bids_v1",
   followUps: "fablead_followups_v1",
   workspaceSettings: "fablead_workspace_settings_v1",
+  shopProfile: "fablead_shop_profile_v1",
+  outreachLogs: "fablead_outreach_logs_v1",
 };
 
 function readLocal<T>(key: string, fallback: T): T {
@@ -36,8 +51,64 @@ function writeLocal<T>(key: string, value: T) {
 }
 
 function makeId(prefix: string) {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return `${prefix}-${crypto.randomUUID()}`;
+  void prefix;
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function fromSupabaseCompany(row: Record<string, any>): Company {
+  return {
+    company_id: row.company_id,
+    company_name: row.company_name,
+    company_type: row.company_type || "",
+    city: row.city || "",
+    state: row.state || "",
+    specialization: row.specialization || row.industry_served || "",
+    lead_status: row.lead_status || "New",
+    lead_score: row.lead_score || 0,
+    distance_from_base_miles: Number(row.distance_from_base_miles || 0),
+    public_phone: row.public_phone || "",
+    public_email: row.public_email || row.estimating_email || "",
+    estimating_email: row.estimating_email || row.public_email || "",
+    website: row.website || "",
+    source_url: row.source_url || "",
+    prequalification_url: row.prequalification_url || "",
+    bid_portal_url: row.bid_portal_url || "",
+    invite_list_status: row.invite_list_status || "",
+    typical_scopes: row.typical_scopes || "",
+    data_verified_at: row.data_verified_at?.slice?.(0, 10) || "",
+    notes: row.notes || "",
+    next_action: row.next_action || "",
+    last_contacted_date: row.last_contacted_date || "",
+  };
+}
+
+function toSupabaseCompany(company: Company, workspaceId: string) {
+  return {
+    company_id: company.company_id,
+    workspace_id: workspaceId,
+    company_name: company.company_name,
+    company_type: company.company_type,
+    city: company.city,
+    state: company.state,
+    specialization: company.specialization,
+    lead_status: company.lead_status,
+    lead_score: company.lead_score,
+    distance_from_base_miles: company.distance_from_base_miles,
+    public_phone: company.public_phone,
+    public_email: company.public_email,
+    estimating_email: company.estimating_email,
+    website: company.website,
+    source_url: company.source_url,
+    prequalification_url: company.prequalification_url,
+    bid_portal_url: company.bid_portal_url,
+    invite_list_status: company.invite_list_status,
+    typical_scopes: company.typical_scopes,
+    data_verified_at: company.data_verified_at,
+    notes: company.notes,
+    next_action: company.next_action,
+    last_contacted_date: company.last_contacted_date,
+  };
 }
 
 export function useFabLeadStore() {
@@ -46,6 +117,9 @@ export function useFabLeadStore() {
   const [bids, setBids] = useState<Bid[]>(seedBids);
   const [followUps, setFollowUps] = useState<FollowUp[]>(seedFollowUps);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(defaultWorkspaceSettings);
+  const [shopProfile, setShopProfile] = useState<ShopProfile>(defaultShopProfile);
+  const [outreachLogs, setOutreachLogs] = useState<OutreachLog[]>([]);
+  const [workspaceId, setWorkspaceId] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -54,7 +128,45 @@ export function useFabLeadStore() {
     setBids(readLocal(keys.bids, seedBids));
     setFollowUps(readLocal(keys.followUps, seedFollowUps));
     setWorkspaceSettings(readLocal(keys.workspaceSettings, defaultWorkspaceSettings));
+    setShopProfile(readLocal(keys.shopProfile, defaultShopProfile));
+    setOutreachLogs(readLocal(keys.outreachLogs, []));
     setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    const client = createClient();
+    if (client === null) return;
+    const supabase = client;
+    let active = true;
+
+    async function loadSupabaseWorkspace() {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) return;
+      const { data: bootstrappedWorkspaceId } = await supabase.rpc("bootstrap_shawnee_workspace");
+      const nextWorkspaceId = String(bootstrappedWorkspaceId || "");
+      if (!nextWorkspaceId || !active) return;
+      setWorkspaceId(nextWorkspaceId);
+
+      const [companyResult, contactResult, followResult, bidResult, shopResult, outreachResult] = await Promise.all([
+        supabase.from("companies").select("*").eq("workspace_id", nextWorkspaceId).order("lead_score", { ascending: false }),
+        supabase.from("contacts").select("*").eq("workspace_id", nextWorkspaceId),
+        supabase.from("follow_ups").select("*").eq("workspace_id", nextWorkspaceId).order("due_date", { ascending: true }),
+        supabase.from("bid_opportunities").select("*").eq("workspace_id", nextWorkspaceId).order("bid_due_date", { ascending: true }),
+        supabase.from("shop_profile").select("*").eq("workspace_id", nextWorkspaceId).maybeSingle(),
+        supabase.from("outreach_logs").select("*").eq("workspace_id", nextWorkspaceId).order("outreach_date", { ascending: false }),
+      ]);
+
+      if (!active) return;
+      if (companyResult.data) setCompanies(companyResult.data.map(fromSupabaseCompany));
+      if (contactResult.data) setContacts(contactResult.data.map((row: any) => ({ contact_id: row.contact_id, company_id: row.company_id, first_name: row.first_name || "", last_name: row.last_name || "", title: row.title || "", email: row.email || "", phone: row.phone || "", decision_maker: Boolean(row.decision_maker), next_follow_up_at: row.next_follow_up_at?.slice?.(0, 10) || "" })));
+      if (followResult.data) setFollowUps(followResult.data.map((row: any) => ({ id: row.follow_up_id, company: companyResult.data?.find((company: any) => company.company_id === row.company_id)?.company_name || "Unknown buyer", contact: contactResult.data?.find((contact: any) => contact.contact_id === row.contact_id)?.first_name || "", task: row.description || "", due: row.due_date || "", priority: row.priority || "Medium", status: row.status === "Completed" ? "Complete" : row.status || "Open" })));
+      if (bidResult.data) setBids(bidResult.data.map((row: any) => ({ id: row.bid_id, company: companyResult.data?.find((company: any) => company.company_id === row.company_id)?.company_name || "Unknown buyer", project: row.project_name || "", type: row.scope || row.project_type || "", value: Number(row.estimated_value || 0), due: row.bid_due_date || "", status: row.bid_status || "Found", probability: Number(row.probability_to_win || 0), source_url: row.source_link || "" })));
+      if (shopResult.data) setShopProfile({ shopName: shopResult.data.shop_name || defaultShopProfile.shopName, serviceRadius: shopResult.data.service_radius || defaultShopProfile.serviceRadius, targetCitiesStates: shopResult.data.target_cities_states || defaultShopProfile.targetCitiesStates, tradeScopes: shopResult.data.trade_scopes || defaultShopProfile.tradeScopes, idealProjectTypes: shopResult.data.ideal_project_types || defaultShopProfile.idealProjectTypes, minimumProjectSize: Number(shopResult.data.minimum_project_size || 0), maximumProjectSize: Number(shopResult.data.maximum_project_size || 0), insuranceCertificationNotes: shopResult.data.insurance_certification_notes || "", primaryContact: shopResult.data.primary_contact || "" });
+      if (outreachResult.data) setOutreachLogs(outreachResult.data.map((row: any) => ({ id: row.outreach_log_id, company: companyResult.data?.find((company: any) => company.company_id === row.company_id)?.company_name || "Unknown buyer", contact: contactResult.data?.find((contact: any) => contact.contact_id === row.contact_id)?.first_name || "", type: row.outreach_type, date: row.outreach_date?.slice?.(0, 10) || "", result: row.result || "", notes: row.notes || "", nextFollowUpDate: row.next_follow_up_date || "" })));
+    }
+
+    loadSupabaseWorkspace();
+    return () => { active = false; };
   }, []);
 
   useEffect(() => { if (loaded) writeLocal(keys.companies, companies); }, [companies, loaded]);
@@ -62,6 +174,8 @@ export function useFabLeadStore() {
   useEffect(() => { if (loaded) writeLocal(keys.bids, bids); }, [bids, loaded]);
   useEffect(() => { if (loaded) writeLocal(keys.followUps, followUps); }, [followUps, loaded]);
   useEffect(() => { if (loaded) writeLocal(keys.workspaceSettings, workspaceSettings); }, [workspaceSettings, loaded]);
+  useEffect(() => { if (loaded) writeLocal(keys.shopProfile, shopProfile); }, [shopProfile, loaded]);
+  useEffect(() => { if (loaded) writeLocal(keys.outreachLogs, outreachLogs); }, [outreachLogs, loaded]);
 
   return useMemo(() => ({
     companies,
@@ -69,25 +183,49 @@ export function useFabLeadStore() {
     bids,
     followUps,
     workspaceSettings,
+    shopProfile,
+    outreachLogs,
     addCompany(input: Omit<Company, "company_id">) {
       const company = { ...input, company_id: makeId("company") };
       setCompanies((current) => [company, ...current]);
+      const supabase = createClient();
+      if (supabase && workspaceId) supabase.from("companies").insert(toSupabaseCompany(company, workspaceId)).then(() => undefined);
       return company;
     },
     importCompanies(imported: Company[]) {
       setCompanies((current) => [...imported, ...current]);
+      const supabase = createClient();
+      if (supabase && workspaceId) supabase.from("companies").insert(imported.map((company) => toSupabaseCompany(company, workspaceId))).then(() => undefined);
+    },
+    updateCompany(next: Company) {
+      setCompanies((current) => current.map((company) => company.company_id === next.company_id ? next : company));
+      const supabase = createClient();
+      if (supabase && workspaceId) supabase.from("companies").update(toSupabaseCompany(next, workspaceId)).eq("company_id", next.company_id).then(() => undefined);
+    },
+    deleteCompany(companyId: string) {
+      setCompanies((current) => current.filter((company) => company.company_id !== companyId));
+      setContacts((current) => current.filter((contact) => contact.company_id !== companyId));
+      const supabase = createClient();
+      if (supabase && workspaceId) supabase.from("companies").delete().eq("company_id", companyId).then(() => undefined);
     },
     importContacts(imported: Contact[]) {
       setContacts((current) => [...imported, ...current]);
+      const supabase = createClient();
+      if (supabase && workspaceId) supabase.from("contacts").insert(imported.map((contact) => ({ workspace_id: workspaceId, company_id: contact.company_id, first_name: contact.first_name, last_name: contact.last_name, title: contact.title, email: contact.email, phone: contact.phone, decision_maker: contact.decision_maker, next_follow_up_at: contact.next_follow_up_at || null }))).then(() => undefined);
     },
     addContact(input: Omit<Contact, "contact_id">) {
       const contact = { ...input, contact_id: makeId("contact") };
       setContacts((current) => [contact, ...current]);
+      const supabase = createClient();
+      if (supabase && workspaceId) supabase.from("contacts").insert({ workspace_id: workspaceId, company_id: contact.company_id, first_name: contact.first_name, last_name: contact.last_name, title: contact.title, email: contact.email, phone: contact.phone, decision_maker: contact.decision_maker, next_follow_up_at: contact.next_follow_up_at || null }).then(() => undefined);
       return contact;
     },
     addBid(input: Omit<Bid, "id">) {
       const bid = { ...input, id: makeId("bid") };
       setBids((current) => [bid, ...current]);
+      const supabase = createClient();
+      const companyId = companies.find((company) => company.company_name === bid.company)?.company_id;
+      if (supabase && workspaceId && companyId) supabase.from("bid_opportunities").insert({ workspace_id: workspaceId, company_id: companyId, project_name: bid.project, scope: bid.type, estimated_value: bid.value, bid_due_date: bid.due || null, bid_status: bid.status, probability_to_win: bid.probability, source_link: bid.source_url }).then(() => undefined);
       return bid;
     },
     addFollowUp(input: Omit<FollowUp, "id">) {
@@ -101,14 +239,43 @@ export function useFabLeadStore() {
     updateWorkspaceSettings(next: WorkspaceSettings) {
       setWorkspaceSettings(next);
     },
+    updateShopProfile(next: ShopProfile) {
+      setShopProfile(next);
+      setWorkspaceSettings((current) => ({ ...current, companyName: next.shopName, serviceRadius: next.serviceRadius }));
+      const supabase = createClient();
+      if (supabase && workspaceId) supabase.from("shop_profile").upsert({ workspace_id: workspaceId, shop_name: next.shopName, service_radius: next.serviceRadius, target_cities_states: next.targetCitiesStates, trade_scopes: next.tradeScopes, ideal_project_types: next.idealProjectTypes, minimum_project_size: next.minimumProjectSize, maximum_project_size: next.maximumProjectSize, insurance_certification_notes: next.insuranceCertificationNotes, primary_contact: next.primaryContact }, { onConflict: "workspace_id" }).then(() => undefined);
+    },
+    addOutreachLog(input: Omit<OutreachLog, "id">) {
+      const log = { ...input, id: makeId("outreach") };
+      setOutreachLogs((current) => [log, ...current]);
+      if (input.nextFollowUpDate) {
+        setFollowUps((current) => [{
+          id: makeId("follow"),
+          company: input.company,
+          contact: input.contact,
+          task: `Follow up after ${input.type.toLowerCase()}: ${input.result || "Check next step"}`,
+          due: input.nextFollowUpDate || "",
+          priority: "Medium",
+          status: "Open",
+        }, ...current]);
+      }
+      setCompanies((current) => current.map((company) => company.company_name === input.company ? { ...company, lead_status: company.lead_status === "New" ? "Contacted" : company.lead_status, last_contacted_date: input.date, next_action: input.nextFollowUpDate ? "Follow up" : company.next_action } : company));
+      const supabase = createClient();
+      const companyId = companies.find((company) => company.company_name === input.company)?.company_id;
+      const contactId = contacts.find((contact) => `${contact.first_name} ${contact.last_name}`.trim() === input.contact)?.contact_id;
+      if (supabase && workspaceId && companyId) supabase.from("outreach_logs").insert({ workspace_id: workspaceId, company_id: companyId, contact_id: contactId || null, outreach_type: input.type, outreach_date: input.date, result: input.result, notes: input.notes, next_follow_up_date: input.nextFollowUpDate || null }).then(() => undefined);
+      return log;
+    },
     resetPilotData() {
       setCompanies(seedCompanies);
       setContacts(seedContacts);
       setBids(seedBids);
       setFollowUps(seedFollowUps);
       setWorkspaceSettings(defaultWorkspaceSettings);
+      setShopProfile(defaultShopProfile);
+      setOutreachLogs([]);
     },
-  }), [bids, companies, contacts, followUps, workspaceSettings]);
+  }), [bids, companies, contacts, followUps, outreachLogs, shopProfile, workspaceId, workspaceSettings]);
 }
 
 export function parseCsv(text: string): Record<string, string>[] {

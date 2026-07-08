@@ -1,11 +1,11 @@
-import { Company } from "./types";
+import { Company, ShopProfile } from "./types";
 
 function includesAny(value: string | undefined, terms: string[]) {
   const haystack = (value || "").toLowerCase();
   return terms.some((term) => haystack.includes(term));
 }
 
-export function calculateLeadScore(company: Partial<Company>, hasContact = false) {
+export function calculateLeadScore(company: Partial<Company>, hasContact = false, shopProfile?: Partial<ShopProfile>) {
   let score = 0;
   const distance = Number(company.distance_from_base_miles || 0);
 
@@ -20,6 +20,10 @@ export function calculateLeadScore(company: Partial<Company>, hasContact = false
 
   if (includesAny(company.specialization, ["construction", "industrial", "infrastructure", "public", "facilities", "civic", "education", "healthcare", "water", "transportation", "commercial"])) score += 15;
   else score += 7;
+
+  const shopFitText = `${shopProfile?.tradeScopes?.join(" ") || ""} ${shopProfile?.idealProjectTypes || ""}`.toLowerCase();
+  const companyFitText = `${company.specialization || ""} ${company.typical_scopes || ""} ${company.notes || ""}`.toLowerCase();
+  if (shopFitText && companyFitText && shopFitText.split(/\W+/).filter((term) => term.length > 4).some((term) => companyFitText.includes(term))) score += 8;
 
   if (company.prequalification_url || company.bid_portal_url || includesAny(company.invite_list_status, ["prequalification", "registration", "portal", "trade partner", "public bid"])) score += 15;
   else if (includesAny(company.invite_list_status, ["outreach", "research"])) score += 7;

@@ -79,6 +79,12 @@ app/
 
 ## Production checklist
 
+- Apply `supabase/migrations/20260708000000_internal_crm_upgrade.sql` before enabling real Supabase login.
+- Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel.
+- Use `/login` to create/sign into an email/password account; the app calls `bootstrap_shawnee_workspace()` to create the Shawnee Steel & Welding workspace and shop profile for the first authenticated user.
+- Use `/shop-profile` to tune trade scopes, radius, project size, certifications, and contact info.
+- Use `/capability` for capability statement and outreach email templates.
+- Use `/reports` for the weekly owner report.
 - Add authenticated sign-in and a server-side workspace bootstrap endpoint.
 - Replace the local launch dataset with typed Supabase queries and mutations.
 - Add server-side CSV batch validation, duplicate review, and error download.
