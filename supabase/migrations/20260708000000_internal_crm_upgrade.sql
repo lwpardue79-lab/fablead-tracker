@@ -202,11 +202,11 @@ select w.workspace_id,
   count(distinct f.follow_up_id) filter (where f.status = 'Open' and f.due_date < current_date) as follow_ups_overdue,
   count(distinct ol.outreach_log_id) filter (where ol.outreach_type = 'Portal Registration' and ol.outreach_date >= date_trunc('week', now())) as portals_registered,
   count(distinct b.bid_id) filter (where b.created_at >= date_trunc('week', now())) as bid_opportunities_found,
-  count(distinct c.company_id) filter (where c.lead_status = 'Bid Invite Received') as bid_invites_received,
+  count(distinct c.company_id) filter (where c.lead_status::text = 'Bid Invite Received') as bid_invites_received,
   count(distinct b.bid_id) filter (where b.bid_status = 'Submitted' and b.submitted_date >= date_trunc('week', now())::date) as bids_submitted,
   count(distinct b.bid_id) filter (where b.bid_status = 'Won') as won_bids,
   count(distinct b.bid_id) filter (where b.bid_status = 'Lost') as lost_bids,
-  count(distinct b.bid_id) filter (where b.bid_status in ('No Bid','No-Bid')) as no_bid_results
+  count(distinct b.bid_id) filter (where b.bid_status::text in ('No Bid','No-Bid')) as no_bid_results
 from public.workspaces w
 left join public.companies c on c.workspace_id = w.workspace_id
 left join public.outreach_logs ol on ol.workspace_id = w.workspace_id
