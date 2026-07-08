@@ -111,6 +111,53 @@ function toSupabaseCompany(company: Company, workspaceId: string) {
   };
 }
 
+function dateDaysFromNow(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function cloneLaunchDataForWorkspace() {
+  const companyIdMap = new Map(seedCompanies.map((company) => [company.company_id, makeId("company")]));
+  const seededCompanies = seedCompanies.map((company) => {
+    const hasSeedContact = seedContacts.some((contact) => contact.company_id === company.company_id);
+    const nextCompany = {
+      ...company,
+      company_id: companyIdMap.get(company.company_id) || makeId("company"),
+    };
+    return {
+      ...nextCompany,
+      lead_score: calculateLeadScore(nextCompany, hasSeedContact, defaultShopProfile),
+    };
+  });
+
+  const seededContacts = seedContacts
+    .map((contact) => {
+      const companyId = companyIdMap.get(contact.company_id);
+      if (!companyId) return null;
+      return { ...contact, contact_id: makeId("contact"), company_id: companyId };
+    })
+    .filter(Boolean) as Contact[];
+
+  const seededFollowUps = seedFollowUps
+    .map((followUp, index) => {
+      const companyId = seededCompanies.find((company) => company.company_name === followUp.company)?.company_id;
+      if (!companyId) return null;
+      const contactId = seededContacts.find((contact) => contact.company_id === companyId)?.contact_id;
+      return {
+        ...followUp,
+        id: makeId("follow"),
+        due: dateDaysFromNow(index + 1),
+        contact: followUp.contact || seededContacts.find((contact) => contact.company_id === companyId)?.first_name || "",
+        companyId,
+        contactId,
+      };
+    })
+    .filter(Boolean) as Array<FollowUp & { companyId: string; contactId?: string }>;
+
+  return { seededCompanies, seededContacts, seededFollowUps };
+}
+
 export function useFabLeadStore() {
   const [companies, setCompanies] = useState<Company[]>(seedCompanies);
   const [contacts, setContacts] = useState<Contact[]>(seedContacts);
@@ -157,12 +204,68 @@ export function useFabLeadStore() {
       ]);
 
       if (!active) return;
-      if (companyResult.data) setCompanies(companyResult.data.map(fromSupabaseCompany));
-      if (contactResult.data) setContacts(contactResult.data.map((row: any) => ({ contact_id: row.contact_id, company_id: row.company_id, first_name: row.first_name || "", last_name: row.last_name || "", title: row.title || "", email: row.email || "", phone: row.phone || "", decision_maker: Boolean(row.decision_maker), next_follow_up_at: row.next_follow_up_at?.slice?.(0, 10) || "" })));
-      if (followResult.data) setFollowUps(followResult.data.map((row: any) => ({ id: row.follow_up_id, company: companyResult.data?.find((company: any) => company.company_id === row.company_id)?.company_name || "Unknown buyer", contact: contactResult.data?.find((contact: any) => contact.contact_id === row.contact_id)?.first_name || "", task: row.description || "", due: row.due_date || "", priority: row.priority || "Medium", status: row.status === "Completed" ? "Complete" : row.status || "Open" })));
-      if (bidResult.data) setBids(bidResult.data.map((row: any) => ({ id: row.bid_id, company: companyResult.data?.find((company: any) => company.company_id === row.company_id)?.company_name || "Unknown buyer", project: row.project_name || "", type: row.scope || row.project_type || "", value: Number(row.estimated_value || 0), due: row.bid_due_date || "", status: row.bid_status || "Found", probability: Number(row.probability_to_win || 0), source_url: row.source_link || "" })));
+      let remoteCompanies = companyResult.data || [];
+      let remoteContacts = contactResult.data || [];
+      let remoteFollowUps = followResult.data || [];
+
+      if (remoteCompanies.length === 0) {
+        const { seededCompanies, seededContacts, seededFollowUps } = cloneLaunchDataForWorkspace();
+        const { error: companySeedError } = await supabase.from("companies").insert(seededCompanies.map((company) => toSupabaseCompany(company, nextWorkspaceId)));
+
+        if (!companySeedError) {
+          if (seededContacts.length) {
+            await supabase.from("contacts").insert(seededContacts.map((contact) => ({
+              contact_id: contact.contact_id,
+              workspace_id: nextWorkspaceId,
+              company_id: contact.company_id,
+              first_name: contact.first_name,
+              last_name: contact.last_name,
+              title: contact.title,
+              email: contact.email,
+              phone: contact.phone,
+              decision_maker: contact.decision_maker,
+              next_follow_up_at: contact.next_follow_up_at || null,
+            })));
+          }
+
+          if (seededFollowUps.length) {
+            await supabase.from("follow_ups").insert(seededFollowUps.map((followUp) => ({
+              follow_up_id: followUp.id,
+              workspace_id: nextWorkspaceId,
+              company_id: followUp.companyId,
+              contact_id: followUp.contactId || null,
+              due_date: followUp.due,
+              priority: followUp.priority,
+              task_type: "Bid-list outreach",
+              description: followUp.task,
+              status: followUp.status === "Complete" ? "Completed" : "Open",
+            })));
+          }
+
+          remoteCompanies = seededCompanies.map((company) => toSupabaseCompany(company, nextWorkspaceId));
+          remoteContacts = seededContacts.map((contact) => ({
+            ...contact,
+            workspace_id: nextWorkspaceId,
+          }));
+          remoteFollowUps = seededFollowUps.map((followUp) => ({
+            follow_up_id: followUp.id,
+            workspace_id: nextWorkspaceId,
+            company_id: followUp.companyId,
+            contact_id: followUp.contactId || null,
+            due_date: followUp.due,
+            priority: followUp.priority,
+            description: followUp.task,
+            status: followUp.status === "Complete" ? "Completed" : "Open",
+          }));
+        }
+      }
+
+      if (remoteCompanies) setCompanies(remoteCompanies.map(fromSupabaseCompany));
+      if (remoteContacts) setContacts(remoteContacts.map((row: any) => ({ contact_id: row.contact_id, company_id: row.company_id, first_name: row.first_name || "", last_name: row.last_name || "", title: row.title || "", email: row.email || "", phone: row.phone || "", decision_maker: Boolean(row.decision_maker), next_follow_up_at: row.next_follow_up_at?.slice?.(0, 10) || "" })));
+      if (remoteFollowUps) setFollowUps(remoteFollowUps.map((row: any) => ({ id: row.follow_up_id, company: remoteCompanies.find((company: any) => company.company_id === row.company_id)?.company_name || "Unknown buyer", contact: remoteContacts.find((contact: any) => contact.contact_id === row.contact_id)?.first_name || "", task: row.description || "", due: row.due_date || "", priority: row.priority || "Medium", status: row.status === "Completed" ? "Complete" : row.status || "Open" })));
+      if (bidResult.data) setBids(bidResult.data.map((row: any) => ({ id: row.bid_id, company: remoteCompanies.find((company: any) => company.company_id === row.company_id)?.company_name || "Unknown buyer", project: row.project_name || "", type: row.scope || row.project_type || "", value: Number(row.estimated_value || 0), due: row.bid_due_date || "", status: row.bid_status || "Found", probability: Number(row.probability_to_win || 0), source_url: row.source_link || "" })));
       if (shopResult.data) setShopProfile({ shopName: shopResult.data.shop_name || defaultShopProfile.shopName, serviceRadius: shopResult.data.service_radius || defaultShopProfile.serviceRadius, targetCitiesStates: shopResult.data.target_cities_states || defaultShopProfile.targetCitiesStates, tradeScopes: shopResult.data.trade_scopes || defaultShopProfile.tradeScopes, idealProjectTypes: shopResult.data.ideal_project_types || defaultShopProfile.idealProjectTypes, minimumProjectSize: Number(shopResult.data.minimum_project_size || 0), maximumProjectSize: Number(shopResult.data.maximum_project_size || 0), insuranceCertificationNotes: shopResult.data.insurance_certification_notes || "", primaryContact: shopResult.data.primary_contact || "" });
-      if (outreachResult.data) setOutreachLogs(outreachResult.data.map((row: any) => ({ id: row.outreach_log_id, company: companyResult.data?.find((company: any) => company.company_id === row.company_id)?.company_name || "Unknown buyer", contact: contactResult.data?.find((contact: any) => contact.contact_id === row.contact_id)?.first_name || "", type: row.outreach_type, date: row.outreach_date?.slice?.(0, 10) || "", result: row.result || "", notes: row.notes || "", nextFollowUpDate: row.next_follow_up_date || "" })));
+      if (outreachResult.data) setOutreachLogs(outreachResult.data.map((row: any) => ({ id: row.outreach_log_id, company: remoteCompanies.find((company: any) => company.company_id === row.company_id)?.company_name || "Unknown buyer", contact: remoteContacts.find((contact: any) => contact.contact_id === row.contact_id)?.first_name || "", type: row.outreach_type, date: row.outreach_date?.slice?.(0, 10) || "", result: row.result || "", notes: row.notes || "", nextFollowUpDate: row.next_follow_up_date || "" })));
     }
 
     loadSupabaseWorkspace();
