@@ -6,15 +6,16 @@ import { FormEvent, useState } from "react";
 import { ArrowLeft, ExternalLink, MapPin, Phone } from "lucide-react";
 import { Badge } from "@/components/ui";
 import { calculateLeadScore } from "@/lib/lead-scoring";
-import { companyStatuses, useFabLeadStore } from "@/lib/local-store";
+import { companyStatuses, contactTypes, useFabLeadStore } from "@/lib/local-store";
 import { Company } from "@/lib/types";
 
 export default function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { addBid, addFollowUp, addOutreachLog, archiveCompany, bids, contacts, followUps, outreachLogs, shopProfile, updateCompany, companies } = useFabLeadStore();
+  const { addBid, addContact, addFollowUp, addOutreachLog, archiveCompany, bids, contacts, followUps, outreachLogs, shopProfile, updateCompany, companies } = useFabLeadStore();
   const company = companies.find((item) => item.company_id === id);
   const [editing, setEditing] = useState(false);
+  const [addingContact, setAddingContact] = useState(false);
   const [message, setMessage] = useState("");
   const people = contacts.filter((contact) => contact.company_id === id);
   const companyBids = bids.filter((bid) => bid.company_id === id || bid.company === company?.company_name);
@@ -58,6 +59,37 @@ export default function CompanyDetail() {
     archiveCompany(activeCompany.company_id);
     setMessage("Deleted successfully.");
     router.push("/companies");
+  }
+
+  function saveContact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!company) return;
+    const form = new FormData(event.currentTarget);
+    const firstName = String(form.get("first_name") || "").trim();
+    const lastName = String(form.get("last_name") || "").trim();
+    const email = String(form.get("email") || "").trim();
+    if (!firstName && !lastName && !email) {
+      setMessage("Add at least a contact name or public email.");
+      return;
+    }
+    addContact({
+      company_id: company.company_id,
+      first_name: firstName,
+      last_name: lastName,
+      title: String(form.get("title") || ""),
+      email,
+      phone: String(form.get("phone") || ""),
+      linkedin_url: String(form.get("linkedin_url") || ""),
+      contact_type: String(form.get("contact_type") || "unknown"),
+      source: String(form.get("source") || "Company detail"),
+      confidence_level: String(form.get("confidence_level") || "Medium"),
+      notes: String(form.get("notes") || ""),
+      decision_maker: form.get("decision_maker") === "on",
+      next_follow_up_at: String(form.get("next_follow_up_at") || ""),
+    });
+    event.currentTarget.reset();
+    setAddingContact(false);
+    setMessage("Contact added.");
   }
 
   function quickFollowUp() {
@@ -115,7 +147,30 @@ export default function CompanyDetail() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_1fr]">
         <section className="card p-5"><h2 className="font-serif text-lg font-semibold">Company information</h2><div className="mt-4 rounded-lg bg-emerald-50 p-4"><Badge tone="green">{company.invite_list_status || "Research needed"}</Badge><p className="mt-3 text-sm leading-relaxed text-slate-700">{company.notes || "No notes yet."}</p><div className="mt-3 flex flex-wrap gap-3 text-sm">{company.website && <a className="font-bold text-brand" href={company.website} target="_blank" rel="noreferrer">Website <ExternalLink size={13} className="inline" /></a>}{company.prequalification_url && <a className="font-bold text-brand" href={company.prequalification_url} target="_blank" rel="noreferrer">Prequal link <ExternalLink size={13} className="inline" /></a>}{company.bid_portal_url && <a className="font-bold text-brand" href={company.bid_portal_url} target="_blank" rel="noreferrer">Bid portal <ExternalLink size={13} className="inline" /></a>}</div></div></section>
-        <aside className="card p-5"><h2 className="font-serif text-lg font-semibold">Contacts</h2><div className="mt-4 divide-y divide-slate-100">{people.length ? people.map((person) => <div key={person.contact_id} className="py-3"><p className="text-sm font-semibold">{person.first_name} {person.last_name}</p><p className="text-xs text-slate-400">{person.title}{person.phone ? ` · ${person.phone}` : ""}{person.email ? ` · ${person.email}` : ""}</p></div>) : <p className="py-5 text-sm text-slate-400">No contact yet.</p>}</div></aside>
+        <aside className="card p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-serif text-lg font-semibold">Contacts</h2>
+            <button onClick={() => setAddingContact((value) => !value)} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">{addingContact ? "Close" : "+ Add contact"}</button>
+          </div>
+          {addingContact && (
+            <form onSubmit={saveContact} className="mt-4 grid gap-2">
+              <input name="first_name" className="field" placeholder="First name / department" />
+              <input name="last_name" className="field" placeholder="Last name / office" />
+              <input name="title" className="field" placeholder="Title / role" />
+              <select name="contact_type" className="field" defaultValue="unknown">{contactTypes.map((item) => <option key={item}>{item}</option>)}</select>
+              <input name="email" className="field" type="email" placeholder="Public email" />
+              <input name="phone" className="field" placeholder="Public phone" />
+              <input name="linkedin_url" className="field" placeholder="LinkedIn URL" />
+              <input name="source" className="field" placeholder="Source" defaultValue="Company detail" />
+              <select name="confidence_level" className="field" defaultValue="Medium"><option>High</option><option>Medium</option><option>Low</option></select>
+              <input name="next_follow_up_at" className="field" type="date" />
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600"><input name="decision_maker" type="checkbox" /> Decision maker</label>
+              <textarea name="notes" className="field" placeholder="Notes" rows={3} />
+              <button className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white">Save contact</button>
+            </form>
+          )}
+          <div className="mt-4 divide-y divide-slate-100">{people.length ? people.map((person) => <div key={person.contact_id} className="py-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{person.first_name} {person.last_name}</p><p className="text-xs text-slate-400">{person.title}{person.phone ? ` · ${person.phone}` : ""}{person.email ? ` · ${person.email}` : ""}</p></div><Link href="/contacts" className="text-xs font-bold text-brand">Edit</Link></div></div>) : <p className="py-5 text-sm text-slate-400">No contact yet.</p>}</div>
+        </aside>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">

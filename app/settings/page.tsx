@@ -78,8 +78,11 @@ export default function Settings() {
         </section>
         <section className="card p-6 lg:col-span-2">
           <h2 className="font-serif text-xl font-semibold">Admin</h2>
-          <p className="mt-1 text-sm text-slate-500">Restore archived records or permanently delete records only when you are sure.</p>
-          <Link href="/settings/deleted-items" className="mt-4 inline-flex rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Deleted Items ({deletedItems.length})</Link>
+          <p className="mt-1 text-sm text-slate-500">Restore archived records, run the pilot checklist, or permanently delete records only when you are sure.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/settings/test-mode-checklist" className="inline-flex rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Test Mode Checklist</Link>
+            <Link href="/settings/deleted-items" className="inline-flex rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Deleted Items ({deletedItems.length})</Link>
+          </div>
         </section>
       </div>
     </>

@@ -604,9 +604,10 @@ export function useFabLeadStore() {
     addOutreachLog(input: Omit<OutreachLog, "id">) {
       const company = activeCompanies.find((item) => item.company_id === input.company_id || item.company_name === input.company);
       const log = { ...input, id: makeId("outreach"), company_id: input.company_id || company?.company_id, company: input.company || company?.company_name || "Unknown buyer" };
+      let followUpToSave: FollowUp | null = null;
       setAllOutreachLogs((current) => [log, ...current]);
       if (input.nextFollowUpDate) {
-        const followUp: FollowUp = {
+        followUpToSave = {
           id: makeId("follow"),
           company: log.company,
           company_id: log.company_id,
@@ -619,7 +620,7 @@ export function useFabLeadStore() {
           task_type: "Outreach",
           notes: input.notes,
         };
-        setAllFollowUps((current) => [followUp, ...current]);
+        setAllFollowUps((current) => followUpToSave ? [followUpToSave, ...current] : current);
       }
       if (company) {
         const nextCompany = {
@@ -634,6 +635,18 @@ export function useFabLeadStore() {
       }
       const supabase = supabaseClient();
       if (supabase && workspaceId && log.company_id) supabase.from("outreach_logs").insert({ outreach_log_id: log.id, workspace_id: workspaceId, company_id: log.company_id, contact_id: log.contact_id || null, outreach_type: input.type, outreach_date: input.date, result: input.result, notes: input.notes, next_follow_up_date: input.nextFollowUpDate || null }).then(() => undefined);
+      if (supabase && workspaceId && followUpToSave?.company_id) supabase.from("follow_ups").insert({
+        follow_up_id: followUpToSave.id,
+        workspace_id: workspaceId,
+        company_id: followUpToSave.company_id,
+        contact_id: followUpToSave.contact_id || null,
+        due_date: followUpToSave.due || today(),
+        priority: followUpToSave.priority,
+        task_type: followUpToSave.task_type,
+        description: followUpToSave.task,
+        notes: followUpToSave.notes,
+        status: followUpToSave.status,
+      }).then(() => undefined);
       return log;
     },
     updateOutreachLog(next: OutreachLog) {

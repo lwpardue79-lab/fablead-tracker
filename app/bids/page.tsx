@@ -76,7 +76,7 @@ export default function Bids() {
     <>
       <input name="project" className="field md:col-span-2" placeholder="Project / opportunity name *" defaultValue={bid?.project} required />
       <select name="company_id" className="field" defaultValue={bid?.company_id}>{companies.map((company) => <option key={company.company_id} value={company.company_id}>{company.company_name}</option>)}</select>
-      <select name="contact_id" className="field"><option value="">No contact</option>{contacts.map((contact) => <option key={contact.contact_id} value={contact.contact_id}>{contact.first_name} {contact.last_name}</option>)}</select>
+      <select name="contact_id" className="field" defaultValue={bid?.contact_id || ""}><option value="">No contact</option>{contacts.map((contact) => <option key={contact.contact_id} value={contact.contact_id}>{contact.first_name} {contact.last_name}</option>)}</select>
       <input name="type" className="field" placeholder="Scope" defaultValue={bid?.type || "Miscellaneous Metals"} />
       <input name="location" className="field" placeholder="Project location" defaultValue={bid?.location} />
       <input name="due" className="field" type="date" defaultValue={bid?.due} />
