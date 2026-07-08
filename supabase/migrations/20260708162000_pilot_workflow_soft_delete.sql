@@ -42,7 +42,9 @@ create index if not exists outreach_logs_workspace_deleted_idx on public.outreac
 create index if not exists follow_ups_workspace_deleted_idx on public.follow_ups (workspace_id, deleted_at);
 create index if not exists bid_opportunities_workspace_deleted_idx on public.bid_opportunities (workspace_id, deleted_at);
 
-create or replace view public.weekly_owner_report with (security_invoker = true) as
+drop view if exists public.weekly_owner_report;
+
+create view public.weekly_owner_report with (security_invoker = true) as
 select w.workspace_id,
   count(distinct c.company_id) filter (where c.created_at >= date_trunc('week', now()) and c.deleted_at is null) as buyers_added_this_week,
   count(distinct c.company_id) filter (where c.last_contacted_date >= date_trunc('week', now())::date and c.deleted_at is null) as companies_contacted_this_week,
