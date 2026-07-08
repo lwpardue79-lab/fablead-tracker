@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { Download, Search } from "lucide-react";
 import { Badge, Button, PageHeader } from "@/components/ui";
 import { calculateLeadScore } from "@/lib/lead-scoring";
@@ -19,7 +19,7 @@ function isOverdue(date?: string) {
 }
 
 export default function CompaniesPage() {
-  const { addBid, addCompany, addFollowUp, addOutreachLog, archiveCompany, companies, contacts, updateCompany } = useFabLeadStore();
+  const { addBid, addCompany, addCompanyStatusHistory, addFollowUp, addOutreachLog, archiveCompany, companies, contacts, updateCompany, workspaceSettings } = useFabLeadStore();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("All");
   const [type, setType] = useState("All");
@@ -28,6 +28,9 @@ export default function CompaniesPage() {
   const [missing, setMissing] = useState("All");
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState("");
+  const [undo, setUndo] = useState<{ company: Company; previousStatus: string; text: string } | null>(null);
+  const [pendingUnregister, setPendingUnregister] = useState<Company | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const companyTypes = useMemo(() => ["All", ...Array.from(new Set(companies.map((company) => company.company_type).filter(Boolean))).sort()], [companies]);
 
@@ -108,9 +111,53 @@ export default function CompaniesPage() {
     setMessage(`${type} logged for ${company.company_name}.`);
   }
 
+  function showUndoToast(company: Company, previousStatus: string, text: string) {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setMessage(text);
+    setUndo({ company, previousStatus, text });
+    undoTimer.current = setTimeout(() => setUndo(null), 7000);
+  }
+
+  function changeStatus(company: Company, nextStatus: string, options: { confirmUnregister?: boolean; registeredDefaults?: boolean } = {}) {
+    const oldStatus = company.lead_status || "New";
+    if (oldStatus === nextStatus) return;
+    if (options.confirmUnregister && oldStatus === "Registered" && nextStatus !== "Registered") {
+      const confirmed = window.confirm("Mark this company as not registered? This will change the status but keep all outreach history.");
+      if (!confirmed) return;
+    }
+    const nextCompany = {
+      ...company,
+      lead_status: nextStatus,
+      invite_list_status: options.registeredDefaults ? "Registered / prequalification started" : company.invite_list_status,
+      next_action: options.registeredDefaults ? "Watch for bid invites or follow up with estimating" : company.next_action,
+      next_action_due_date: company.next_action_due_date || "",
+    };
+    updateCompany(nextCompany);
+    addCompanyStatusHistory(company, oldStatus, nextStatus, workspaceSettings.userName);
+    showUndoToast(nextCompany, oldStatus, nextStatus === "Registered" ? "Company marked as Registered." : `Company status changed to ${nextStatus}.`);
+  }
+
+  function undoStatusChange() {
+    if (!undo) return;
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    updateCompany({ ...undo.company, lead_status: undo.previousStatus });
+    addCompanyStatusHistory(undo.company, undo.company.lead_status, undo.previousStatus, workspaceSettings.userName);
+    setMessage(`Status restored to ${undo.previousStatus}.`);
+    setUndo(null);
+  }
+
   function markRegistered(company: Company) {
-    updateCompany({ ...company, lead_status: "Registered", invite_list_status: "Registered / prequalification started", next_action: "Watch for bid invites or follow up with estimating", next_action_due_date: company.next_action_due_date || "" });
-    setMessage(`${company.company_name} marked Registered.`);
+    changeStatus(company, "Registered", { registeredDefaults: true });
+  }
+
+  function markNotRegistered(company: Company) {
+    setPendingUnregister(company);
+  }
+
+  function confirmMarkNotRegistered() {
+    if (!pendingUnregister) return;
+    changeStatus(pendingUnregister, "Contacted");
+    setPendingUnregister(null);
   }
 
   function addQuickFollowUp(company: Company) {
@@ -138,7 +185,21 @@ export default function CompaniesPage() {
         action={<div className="flex flex-wrap gap-2"><span onClick={exportCsv}><Button variant="secondary"><span className="flex items-center gap-2"><Download size={15} />Export</span></Button></span><button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">+ Add buyer</button></div>}
       />
 
-      {message && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</div>}
+      {pendingUnregister && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h2 className="font-serif text-xl font-semibold text-ink">Mark Not Registered?</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">Mark this company as not registered? This will change the status but keep all outreach history.</p>
+            <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">{pendingUnregister.company_name}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setPendingUnregister(null)} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={confirmMarkNotRegistered} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Mark Not Registered</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {message && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700"><span>{message}</span>{undo && <button onClick={undoStatusChange} className="rounded-md border border-emerald-300 bg-white px-3 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100">Undo</button>}</div>}
 
       {showForm && (
         <form onSubmit={submitBuyer} className="card mb-5 grid gap-3 p-5 md:grid-cols-3">
@@ -184,12 +245,12 @@ export default function CompaniesPage() {
               <td><Link href={`/companies/${company.company_id}`} className="font-semibold text-ink hover:text-brand">{company.company_name}</Link><p className="mt-1 text-xs text-slate-400">{company.city}, {company.state} · {company.company_type}</p></td>
               <td><p className="text-sm font-semibold">{company.next_action || "No next action"}</p><p className={`mt-1 text-xs ${overdue ? "font-bold text-red-600" : "text-slate-400"}`}>{company.next_action_due_date || "No due date"} · {company.next_action_owner || "Unassigned"} · {company.next_action_priority || "Medium"}</p></td>
               <td>{reasons.length ? <div className="flex flex-wrap gap-1">{reasons.map((reason) => <Badge key={reason} tone="orange">{reason}</Badge>)}</div> : <Badge tone="green">Complete enough</Badge>}</td>
-              <td><Badge tone={company.lead_status === "Qualified" || company.lead_status === "Registered" ? "green" : company.lead_status === "New" ? "orange" : company.lead_status === "Not Fit" ? "red" : "slate"}>{company.lead_status}</Badge></td>
+              <td><div className="space-y-2"><select aria-label={`Status for ${company.company_name}`} className="field min-w-40 py-1.5 text-xs font-semibold" value={company.lead_status || "New"} onChange={(event) => changeStatus(company, event.target.value, { confirmUnregister: true })}>{companyStatuses.map((item) => <option key={item}>{item}</option>)}</select>{company.lead_status === "Registered" && <button onClick={() => markNotRegistered(company)} className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-800 hover:bg-orange-100">Mark Not Registered</button>}</div></td>
               <td><span className="inline-grid size-9 place-items-center rounded-full bg-ink text-xs font-bold text-white">{company.lead_score}</span></td>
               <td><div className="flex flex-wrap gap-1.5 text-xs">
                 <button onClick={() => logQuick(company, "Call")} className="rounded-md border px-2 py-1 font-semibold">Log Call</button>
                 <button onClick={() => logQuick(company, "Email")} className="rounded-md border px-2 py-1 font-semibold">Log Email</button>
-                <button onClick={() => markRegistered(company)} className="rounded-md border px-2 py-1 font-semibold">Mark Registered</button>
+                {company.lead_status === "Registered" ? <button onClick={() => markNotRegistered(company)} className="rounded-md border border-orange-200 px-2 py-1 font-semibold text-orange-800">Mark Not Registered</button> : <button onClick={() => markRegistered(company)} className="rounded-md border px-2 py-1 font-semibold">Mark Registered</button>}
                 <button onClick={() => addQuickFollowUp(company)} className="rounded-md border px-2 py-1 font-semibold">Follow-Up</button>
                 <button onClick={() => addQuickBid(company)} className="rounded-md border px-2 py-1 font-semibold">Add Bid</button>
                 <Link href={`/companies/${company.company_id}`} className="rounded-md border px-2 py-1 font-semibold">Edit</Link>

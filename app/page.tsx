@@ -17,10 +17,7 @@ export default function Dashboard() {
   const overdueFollowUps = openFollowUps.filter((followUp) => followUp.due && followUp.due < today);
   const overdueCompanyActions = companies.filter((company) => company.next_action_due_date && company.next_action_due_date < today);
   const averageScore = companies.length ? Math.round(companies.reduce((sum, company) => sum + company.lead_score, 0) / companies.length) : 0;
-  const registrationReady = companies.filter((company) => {
-    const status = `${company.invite_list_status || ""} ${company.prequalification_url || ""} ${company.bid_portal_url || ""}`.toLowerCase();
-    return ["registration", "portal", "prequalification", "trade partner", "public bid"].some((term) => status.includes(term));
-  }).length;
+  const registeredCompanies = companies.filter((company) => company.lead_status === "Registered").length;
   const totalBidValue = openBids.reduce((sum, bid) => sum + bid.value, 0);
   const weightedValue = openBids.reduce((sum, bid) => sum + bid.value * (bid.probability / 100), 0);
   const topLeads = [...companies].sort((a, b) => b.lead_score - a.lead_score).slice(0, 5);
@@ -28,7 +25,7 @@ export default function Dashboard() {
   const metrics = [
     ["Companies", String(companies.length), "Live workspace records", Building2],
     ["Contacts", String(contacts.length), "Imported or manually added", Users],
-    ["Bid-list paths", String(registrationReady), "Registration or portal found", Target],
+    ["Registered", String(registeredCompanies), "On bid/prequal list", Target],
     ["Open bid value", `$${totalBidValue.toLocaleString()}`, "Tracked opportunities", CircleDollarSign],
     ["Weighted value", `$${Math.round(weightedValue).toLocaleString()}`, "Probability-adjusted", TrendingUp],
     ["Overdue actions", String(overdueFollowUps.length + overdueCompanyActions.length), "Needs owner attention", CalendarClock],

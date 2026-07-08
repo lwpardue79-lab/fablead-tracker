@@ -12,15 +12,17 @@ import { Company } from "@/lib/types";
 export default function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { addBid, addContact, addFollowUp, addOutreachLog, archiveCompany, bids, contacts, followUps, outreachLogs, shopProfile, updateCompany, companies } = useFabLeadStore();
+  const { addBid, addCompanyStatusHistory, addContact, addFollowUp, addOutreachLog, archiveCompany, bids, contacts, followUps, outreachLogs, shopProfile, updateCompany, companies, workspaceSettings } = useFabLeadStore();
   const company = companies.find((item) => item.company_id === id);
   const [editing, setEditing] = useState(false);
   const [addingContact, setAddingContact] = useState(false);
+  const [confirmUnregister, setConfirmUnregister] = useState(false);
   const [message, setMessage] = useState("");
   const people = contacts.filter((contact) => contact.company_id === id);
   const companyBids = bids.filter((bid) => bid.company_id === id || bid.company === company?.company_name);
   const companyFollowUps = followUps.filter((followUp) => followUp.company_id === id || followUp.company === company?.company_name);
   const companyOutreach = outreachLogs.filter((log) => log.company_id === id || log.company === company?.company_name);
+  const statusHistory = companyOutreach.filter((log) => log.result?.startsWith("Status changed from"));
 
   if (!company) return <div className="card p-8"><p className="font-semibold">Buyer not found.</p><Link href="/companies" className="mt-3 inline-block text-sm font-bold text-brand">Back to Companies</Link></div>;
   const activeCompany = company;
@@ -49,9 +51,31 @@ export default function CompanyDetail() {
       next_action_priority: String(form.get("next_action_priority") || "Medium"),
       notes: String(form.get("notes") || ""),
     };
-    updateCompany({ ...next, lead_score: calculateLeadScore(next, people.length > 0, shopProfile) });
+    const scoredCompany = { ...next, lead_score: calculateLeadScore(next, people.length > 0, shopProfile) };
+    updateCompany(scoredCompany);
+    if (company.lead_status !== scoredCompany.lead_status) addCompanyStatusHistory(company, company.lead_status, scoredCompany.lead_status, workspaceSettings.userName);
     setEditing(false);
     setMessage("Company updated.");
+  }
+
+  function changeStatus(nextStatus: string, skipUnregisterConfirm = false) {
+    if (!company || company.lead_status === nextStatus) return;
+    if (!skipUnregisterConfirm && company.lead_status === "Registered" && nextStatus !== "Registered") {
+      const confirmed = window.confirm("Mark this company as not registered? This will change the status but keep all outreach history.");
+      if (!confirmed) return;
+    }
+    updateCompany({ ...company, lead_status: nextStatus });
+    addCompanyStatusHistory(company, company.lead_status, nextStatus, workspaceSettings.userName);
+    setMessage(nextStatus === "Registered" ? "Company marked as Registered." : `Company status changed to ${nextStatus}.`);
+  }
+
+  function requestMarkNotRegistered() {
+    setConfirmUnregister(true);
+  }
+
+  function confirmMarkNotRegistered() {
+    setConfirmUnregister(false);
+    changeStatus("Contacted", true);
   }
 
   function archive() {
@@ -110,13 +134,26 @@ export default function CompanyDetail() {
   return (
     <>
       <Link href="/companies" className="mb-5 flex items-center gap-2 text-xs font-semibold text-slate-500"><ArrowLeft size={14} />Back to buyer directory</Link>
+      {confirmUnregister && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h2 className="font-serif text-xl font-semibold text-ink">Mark Not Registered?</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">Mark this company as not registered? This will change the status but keep all outreach history.</p>
+            <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">{company.company_name}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setConfirmUnregister(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={confirmMarkNotRegistered} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Mark Not Registered</button>
+            </div>
+          </div>
+        </div>
+      )}
       {message && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</div>}
       <div className="card p-6">
         <div className="flex flex-col justify-between gap-5 md:flex-row">
           <div>
             <div className="mb-3 flex items-center gap-3"><div className="grid size-12 place-items-center rounded-xl bg-moss/10 font-bold text-moss">{company.company_name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</div><div><h1 className="font-serif text-3xl font-semibold">{company.company_name}</h1><p className="text-sm text-slate-400">{company.company_type} · {company.specialization}</p></div></div>
             <div className="flex flex-wrap gap-4 text-sm text-slate-500"><span className="flex items-center gap-1.5"><MapPin size={14} />{company.city}, {company.state} · {company.distance_from_base_miles} mi</span>{company.public_phone && <span className="flex items-center gap-1.5"><Phone size={14} />{company.public_phone}</span>}</div>
-            <div className="mt-4 flex flex-wrap gap-2"><Badge>{company.lead_status}</Badge>{company.next_action && <Badge tone={company.next_action_due_date && company.next_action_due_date < new Date().toISOString().slice(0, 10) ? "red" : "orange"}>{company.next_action} · {company.next_action_due_date || "no due date"}</Badge>}</div>
+            <div className="mt-4 flex flex-wrap items-center gap-2"><select aria-label="Company status" className="field w-auto min-w-44 py-1.5 text-xs font-semibold" value={company.lead_status || "New"} onChange={(event) => changeStatus(event.target.value)}>{companyStatuses.map((status) => <option key={status}>{status}</option>)}</select>{company.lead_status === "Registered" && <button onClick={requestMarkNotRegistered} className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-100">Mark Not Registered</button>}{company.next_action && <Badge tone={company.next_action_due_date && company.next_action_due_date < new Date().toISOString().slice(0, 10) ? "red" : "orange"}>{company.next_action} · {company.next_action_due_date || "no due date"}</Badge>}</div>
           </div>
           <div className="flex flex-wrap items-start gap-2"><div className="text-center"><div className="grid size-14 place-items-center rounded-full bg-ink text-xl font-bold text-white">{company.lead_score}</div><p className="mt-1 text-[10px] font-bold uppercase text-slate-400">Fit score</p></div><button onClick={() => quickOutreach("Call")} className="rounded-lg border px-3 py-2 text-sm font-semibold">Log Call</button><button onClick={() => quickOutreach("Email")} className="rounded-lg border px-3 py-2 text-sm font-semibold">Log Email</button><button onClick={quickFollowUp} className="rounded-lg border px-3 py-2 text-sm font-semibold">Add Follow-Up</button><button onClick={quickBid} className="rounded-lg border px-3 py-2 text-sm font-semibold">Add Bid</button><button onClick={() => setEditing(!editing)} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white">{editing ? "Close edit" : "Edit"}</button><button onClick={archive} className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700">Delete/Archive</button></div>
         </div>
@@ -178,6 +215,10 @@ export default function CompanyDetail() {
         <section className="card p-5"><h2 className="font-serif text-lg font-semibold">Follow-ups</h2><div className="mt-3 space-y-3">{companyFollowUps.length ? companyFollowUps.map((followUp) => <div key={followUp.id} className="rounded-lg bg-slate-50 p-3 text-sm"><p className="font-semibold">{followUp.task}</p><p className="text-xs text-slate-400">{followUp.due || "No due date"} · {followUp.priority}</p></div>) : <p className="text-sm text-slate-400">No follow-ups.</p>}</div></section>
         <section className="card p-5"><h2 className="font-serif text-lg font-semibold">Bid opportunities</h2><div className="mt-3 space-y-3">{companyBids.length ? companyBids.map((bid) => <div key={bid.id} className="rounded-lg bg-slate-50 p-3 text-sm"><p className="font-semibold">{bid.project}</p><p className="text-xs text-slate-400">${bid.value.toLocaleString()} · {bid.status}</p></div>) : <p className="text-sm text-slate-400">No bids yet.</p>}</div></section>
       </div>
+      <section className="card mt-6 p-5">
+        <h2 className="font-serif text-lg font-semibold">Status history</h2>
+        <div className="mt-3 space-y-3">{statusHistory.length ? statusHistory.map((log) => <div key={log.id} className="rounded-lg bg-slate-50 p-3 text-sm"><p className="font-semibold">{log.result}</p><p className="mt-1 text-xs text-slate-400">{log.date} · {log.contact || workspaceSettings.userName || "Unknown user"}</p></div>) : <p className="text-sm text-slate-400">No status changes logged yet.</p>}</div>
+      </section>
     </>
   );
 }

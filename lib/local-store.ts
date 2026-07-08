@@ -407,7 +407,7 @@ export function useFabLeadStore() {
   useEffect(() => { if (loaded) writeLocal(keys.shopProfile, shopProfile); }, [shopProfile, loaded]);
   useEffect(() => { if (loaded) writeLocal(keys.outreachLogs, allOutreachLogs); }, [allOutreachLogs, loaded]);
 
-  const activeCompanies = allCompanies.filter((company) => !isDeleted(company) && company.lead_status !== "Archived");
+  const activeCompanies = allCompanies.filter((company) => !isDeleted(company));
   const activeCompanyIds = new Set(activeCompanies.map((company) => company.company_id));
   const activeContacts = allContacts.filter((contact) => !isDeleted(contact) && activeCompanyIds.has(contact.company_id));
   const activeBids = allBids.filter((bid) => !isDeleted(bid) && (!bid.company_id || activeCompanyIds.has(bid.company_id)));
@@ -530,6 +530,34 @@ export function useFabLeadStore() {
     updateCompany(next: Company) {
       setAllCompanies((current) => current.map((company) => company.company_id === next.company_id ? next : company));
       updateCompanySupabase(next);
+    },
+    addCompanyStatusHistory(company: Company, oldStatus: string, newStatus: string, user = workspaceSettings.userName) {
+      if (oldStatus === newStatus) return;
+      const log: OutreachLog = {
+        id: makeId("status-history"),
+        company: company.company_name,
+        company_id: company.company_id,
+        contact: user || "System",
+        contact_id: "",
+        type: "Note",
+        date: today(),
+        result: `Status changed from ${oldStatus || "Unknown"} to ${newStatus}.`,
+        notes: `Status history · changed by ${user || "Unknown user"} on ${today()}.`,
+        nextFollowUpDate: "",
+      };
+      setAllOutreachLogs((current) => [log, ...current]);
+      const supabase = supabaseClient();
+      if (supabase && workspaceId) supabase.from("outreach_logs").insert({
+        outreach_log_id: log.id,
+        workspace_id: workspaceId,
+        company_id: company.company_id,
+        contact_id: null,
+        outreach_type: "Note",
+        outreach_date: log.date,
+        result: log.result,
+        notes: log.notes,
+        next_follow_up_date: null,
+      }).then(() => undefined);
     },
     archiveCompany(companyId: string) {
       archiveRecord("company", companyId);
