@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { bids as seedBids, companies as seedCompanies, contacts as seedContacts, followUps as seedFollowUps } from "./demo-data";
+import { calculateLeadScore } from "./lead-scoring";
 import { Bid, Company, Contact, FollowUp, WorkspaceSettings } from "./types";
 
 export const defaultWorkspaceSettings: WorkspaceSettings = {
@@ -76,6 +77,9 @@ export function useFabLeadStore() {
     importCompanies(imported: Company[]) {
       setCompanies((current) => [...imported, ...current]);
     },
+    importContacts(imported: Contact[]) {
+      setContacts((current) => [...imported, ...current]);
+    },
     addContact(input: Omit<Contact, "contact_id">) {
       const contact = { ...input, contact_id: makeId("contact") };
       setContacts((current) => [contact, ...current]);
@@ -141,28 +145,58 @@ export function parseCsv(text: string): Record<string, string>[] {
   return body.map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index] || ""])));
 }
 
-export function csvRowsToCompanies(rows: Record<string, string>[]): Company[] {
-  return rows
+function contactFromRow(row: Record<string, string>, companyId: string): Contact | null {
+  const contactName = row.contact_name || row.contact || "";
+  const [firstName = "", ...lastParts] = contactName.split(" ").filter(Boolean);
+  const contact: Omit<Contact, "contact_id"> = {
+    company_id: companyId,
+    first_name: row.contact_first_name || firstName || row.first_name || "",
+    last_name: row.contact_last_name || lastParts.join(" ") || row.last_name || "",
+    title: row.contact_title || row.title || "",
+    email: row.contact_email || row.email || row.public_email || "",
+    phone: row.contact_phone || row.phone || "",
+    decision_maker: ["true", "yes", "1", "y"].includes((row.decision_maker || "").toLowerCase()),
+    next_follow_up_at: row.next_follow_up_at || "",
+  };
+
+  if (!contact.first_name && !contact.last_name && !contact.email && !contact.phone && !contact.title) return null;
+  return { ...contact, contact_id: makeId("imported-contact") };
+}
+
+export function csvRowsToImportData(rows: Record<string, string>[]): { companies: Company[]; contacts: Contact[] } {
+  const contacts: Contact[] = [];
+  const companies = rows
     .filter((row) => row.company_name || row.company || row.buyer)
-    .map((row) => ({
-      company_id: makeId("imported-company"),
-      company_name: row.company_name || row.company || row.buyer || "Unnamed buyer",
-      company_type: row.company_type || row.buyer_type || "Buyer",
-      city: row.city || "Kansas City",
-      state: row.state || "MO",
-      specialization: row.specialization || row.project_market || row.industry_served || "Commercial Construction",
-      lead_status: row.lead_status || "New",
-      lead_score: Number(row.lead_score || row.fit_score || 70),
-      distance_from_base_miles: Number(row.distance_from_base_miles || 0),
-      public_phone: row.public_phone || row.phone,
-      public_email: row.public_email || row.email,
-      website: row.website,
-      source_url: row.source_url,
-      prequalification_url: row.prequalification_url,
-      bid_portal_url: row.bid_portal_url,
-      invite_list_status: row.invite_list_status || "Imported",
-      typical_scopes: row.typical_scopes,
-      data_verified_at: row.data_verified_at || new Date().toISOString().slice(0, 10),
-      notes: row.notes || "Imported from CSV.",
-    }));
+    .map((row) => {
+      const companyId = makeId("imported-company");
+      const importedContact = contactFromRow(row, companyId);
+      if (importedContact) contacts.push(importedContact);
+      const company: Company = {
+        company_id: companyId,
+        company_name: row.company_name || row.company || row.buyer || "Unnamed buyer",
+        company_type: row.company_type || row.buyer_type || "Buyer",
+        city: row.city || "Kansas City",
+        state: row.state || "MO",
+        specialization: row.specialization || row.project_market || row.industry_served || "Commercial Construction",
+        lead_status: row.lead_status || "New",
+        lead_score: 0,
+        distance_from_base_miles: Number(row.distance_from_base_miles || 0),
+        public_phone: row.public_phone || row.company_phone || "",
+        public_email: row.public_email || row.company_email || "",
+        website: row.website,
+        source_url: row.source_url,
+        prequalification_url: row.prequalification_url,
+        bid_portal_url: row.bid_portal_url,
+        invite_list_status: row.invite_list_status || "Imported",
+        typical_scopes: row.typical_scopes,
+        data_verified_at: row.data_verified_at || new Date().toISOString().slice(0, 10),
+        notes: row.notes || "Imported from CSV.",
+      };
+      return { ...company, lead_score: calculateLeadScore(company, Boolean(importedContact)) };
+    });
+  return { companies, contacts };
+}
+
+export function csvRowsToCompanies(rows: Record<string, string>[]): Company[] {
+  return csvRowsToImportData(rows).companies;
 }

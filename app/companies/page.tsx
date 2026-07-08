@@ -4,7 +4,9 @@ import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { Download, Search, SlidersHorizontal } from "lucide-react";
 import { Badge, Button, PageHeader } from "@/components/ui";
+import { calculateLeadScore } from "@/lib/lead-scoring";
 import { useFabLeadStore } from "@/lib/local-store";
+import { Company } from "@/lib/types";
 
 export default function CompaniesPage() {
   const { companies, addCompany } = useFabLeadStore();
@@ -35,14 +37,14 @@ export default function CompaniesPage() {
     const form = new FormData(event.currentTarget);
     const companyName = String(form.get("company_name") || "").trim();
     if (!companyName) return;
-    addCompany({
+    const company: Omit<Company, "company_id"> = {
       company_name: companyName,
       company_type: String(form.get("company_type") || "Buyer"),
       city: String(form.get("city") || "Kansas City"),
       state: String(form.get("state") || "MO"),
       specialization: String(form.get("specialization") || "Commercial Construction"),
       lead_status: String(form.get("lead_status") || "New"),
-      lead_score: Number(form.get("lead_score") || 70),
+      lead_score: 0,
       distance_from_base_miles: Number(form.get("distance_from_base_miles") || 0),
       public_phone: String(form.get("public_phone") || ""),
       website: String(form.get("website") || ""),
@@ -52,7 +54,8 @@ export default function CompaniesPage() {
       typical_scopes: String(form.get("typical_scopes") || ""),
       data_verified_at: new Date().toISOString().slice(0, 10),
       notes: String(form.get("notes") || ""),
-    });
+    };
+    addCompany({ ...company, lead_score: calculateLeadScore(company) });
     event.currentTarget.reset();
     setShowForm(false);
     setMessage(`${companyName} added to the buyer directory.`);
@@ -61,9 +64,9 @@ export default function CompaniesPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Kansas City buyer directory"
+        eyebrow="Buyer directory"
         title="Companies that can buy your work"
-        description="Verified public pathways to general contractors, agencies, schools, and procurement systems."
+        description="Search and manage public buyer pathways, bid-list targets, agencies, contractors, and procurement systems."
         action={<div className="flex gap-2"><span onClick={exportCsv}><Button variant="secondary"><span className="flex items-center gap-2"><Download size={15} />Export</span></Button></span><button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">+ Add buyer</button></div>}
       />
 
@@ -78,7 +81,7 @@ export default function CompaniesPage() {
           <input name="distance_from_base_miles" className="field" placeholder="Distance from base" type="number" defaultValue="0" />
           <input name="specialization" className="field md:col-span-2" placeholder="Project market" defaultValue="Commercial Construction" />
           <select name="lead_status" className="field"><option>New</option><option>Contacted</option><option>Qualified</option><option>Customer</option><option>Lost</option></select>
-          <input name="lead_score" className="field" placeholder="Fit score" type="number" min="0" max="100" defaultValue="70" />
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500">Fit score auto-calculates</div>
           <input name="public_phone" className="field" placeholder="Public phone" />
           <input name="website" className="field" placeholder="Website" />
           <input name="prequalification_url" className="field" placeholder="Prequalification URL" />

@@ -32,7 +32,7 @@ export default function Settings() {
 
   return (
     <>
-      <PageHeader eyebrow="Workspace" title="Settings" description="Launch in Kansas City, then reuse the same territory model nationwide." />
+      <PageHeader eyebrow="Workspace" title="Settings" description="Set the company identity, service region, and scoring preferences for this sales workspace." />
       {message && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</div>}
       <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <form onSubmit={saveSettings} className="card p-6">

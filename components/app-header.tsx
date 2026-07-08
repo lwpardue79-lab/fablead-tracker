@@ -12,13 +12,13 @@ function initials(name: string) {
 }
 
 export function AppHeader() {
-  const { workspaceSettings } = useFabLeadStore();
+  const { companies, contacts, workspaceSettings } = useFabLeadStore();
   const companyName = workspaceSettings.companyName || "Shawnee Steel & Welding";
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/85 px-5 backdrop-blur lg:px-8">
       <p className="font-serif font-semibold lg:hidden">FabLead Tracker</p>
-      <p className="hidden text-xs font-semibold uppercase tracking-wider text-slate-400 lg:block">Launch market · Kansas City Metro · 25 verified buyer paths</p>
+      <p className="hidden text-xs font-semibold uppercase tracking-wider text-slate-400 lg:block">Buyer pipeline · {companies.length} companies · {contacts.length} contacts</p>
       <div className="flex items-center gap-3">
         <div className="hidden text-right sm:block">
           <p className="text-xs font-semibold">{companyName}</p>

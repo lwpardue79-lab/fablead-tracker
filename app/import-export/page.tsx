@@ -3,8 +3,8 @@
 import { ChangeEvent, useRef, useState } from "react";
 import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import { PageHeader } from "@/components/ui";
-import { csvRowsToCompanies, parseCsv, useFabLeadStore } from "@/lib/local-store";
-import { Company } from "@/lib/types";
+import { csvRowsToImportData, parseCsv, useFabLeadStore } from "@/lib/local-store";
+import { Company, Contact } from "@/lib/types";
 
 const exportColumns: (keyof Company)[] = [
   "company_name",
@@ -40,17 +40,18 @@ function csvCell(value: unknown) {
 
 export default function ImportExport() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { companies, importCompanies } = useFabLeadStore();
+  const { companies, importCompanies, importContacts } = useFabLeadStore();
   const [fileName, setFileName] = useState("");
   const [pastedCsv, setPastedCsv] = useState("");
   const [pendingCompanies, setPendingCompanies] = useState<Company[]>([]);
+  const [pendingContacts, setPendingContacts] = useState<Contact[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   function template() {
     downloadCsv("fablead-import-template.csv", [
-      "company_name,company_type,city,state,specialization,lead_status,lead_score,distance_from_base_miles,public_phone,public_email,website,source_url,prequalification_url,bid_portal_url,invite_list_status,typical_scopes,notes",
-      "Example General Contractor,General Contractor,Kansas City,MO,Commercial Construction,New,82,12,816-555-0100,estimating@example.com,https://example.com,https://example.com/bids,https://example.com/prequal,https://example.com/vendors,Needs Invite List,\"stairs; railings; misc metals\",Imported example row",
+      "company_name,company_type,city,state,specialization,lead_status,distance_from_base_miles,public_phone,public_email,website,source_url,prequalification_url,bid_portal_url,invite_list_status,typical_scopes,contact_name,contact_title,contact_email,contact_phone,decision_maker,notes",
+      "Example General Contractor,General Contractor,Kansas City,MO,Commercial Construction,New,12,816-555-0100,info@example.com,https://example.com,https://example.com/source,https://example.com/prequal,https://example.com/bids,Needs Invite List,\"stairs; railings; misc metals\",Estimating Office,Preconstruction,estimating@example.com,816-555-0199,yes,Imported example row",
     ]);
   }
 
@@ -69,19 +70,21 @@ export default function ImportExport() {
     setMessage("");
     setError("");
     setPendingCompanies([]);
+    setPendingContacts([]);
     if (!file) return;
     setFileName(file.name);
 
     try {
       const text = await file.text();
       const rows = parseCsv(text);
-      const parsedCompanies = csvRowsToCompanies(rows);
-      if (!parsedCompanies.length) {
+      const parsed = csvRowsToImportData(rows);
+      if (!parsed.companies.length) {
         setError("No companies found. Make sure your CSV has a company_name, company, or buyer column.");
         return;
       }
-      setPendingCompanies(parsedCompanies);
-      setMessage(`Ready to import ${parsedCompanies.length} companies from ${file.name}.`);
+      setPendingCompanies(parsed.companies);
+      setPendingContacts(parsed.contacts);
+      setMessage(`Ready to import ${parsed.companies.length} companies and ${parsed.contacts.length} contacts from ${file.name}.`);
     } catch {
       setError("Could not read this CSV. Please try a standard UTF-8 comma-separated file.");
     }
@@ -91,21 +94,25 @@ export default function ImportExport() {
     setMessage("");
     setError("");
     setPendingCompanies([]);
-    const parsedCompanies = csvRowsToCompanies(parseCsv(pastedCsv));
-    if (!parsedCompanies.length) {
+    setPendingContacts([]);
+    const parsed = csvRowsToImportData(parseCsv(pastedCsv));
+    if (!parsed.companies.length) {
       setError("No companies found. Paste CSV with a company_name, company, or buyer column.");
       return;
     }
-    setPendingCompanies(parsedCompanies);
+    setPendingCompanies(parsed.companies);
+    setPendingContacts(parsed.contacts);
     setFileName("Pasted CSV");
-    setMessage(`Ready to import ${parsedCompanies.length} companies from pasted CSV.`);
+    setMessage(`Ready to import ${parsed.companies.length} companies and ${parsed.contacts.length} contacts from pasted CSV.`);
   }
 
   function commitImport() {
     if (!pendingCompanies.length) return;
     importCompanies(pendingCompanies);
-    setMessage(`Imported ${pendingCompanies.length} companies. They are now available on the Companies page.`);
+    if (pendingContacts.length) importContacts(pendingContacts);
+    setMessage(`Imported ${pendingCompanies.length} companies and ${pendingContacts.length} contacts. Dashboard, Companies, and Contacts are updated.`);
     setPendingCompanies([]);
+    setPendingContacts([]);
     setFileName("");
     if (inputRef.current) inputRef.current.value = "";
     setError("");
@@ -138,17 +145,18 @@ export default function ImportExport() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button onClick={template} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Download template</button>
             <button onClick={parsePastedCsv} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Preview pasted CSV</button>
-            {pendingCompanies.length > 0 && <button onClick={commitImport} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Import {pendingCompanies.length} buyers</button>}
+            {pendingCompanies.length > 0 && <button onClick={commitImport} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Import {pendingCompanies.length} buyers + {pendingContacts.length} contacts</button>}
           </div>
 
           {pendingCompanies.length > 0 && (
             <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-ink">Preview</p>
+              <p className="mt-1 text-xs text-slate-400">Fit scores are recalculated automatically from buyer fit, bid-list path, contact info, and source quality.</p>
               <div className="mt-3 space-y-2 text-sm text-slate-600">
                 {pendingCompanies.slice(0, 5).map((company) => (
                   <div key={company.company_id} className="flex justify-between gap-4">
                     <span>{company.company_name}</span>
-                    <span className="text-slate-400">{company.city}, {company.state}</span>
+                    <span className="text-slate-400">{company.city}, {company.state} · Fit {company.lead_score}</span>
                   </div>
                 ))}
               </div>
