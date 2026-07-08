@@ -23,7 +23,7 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-Open `http://localhost:3000`. Without environment values the app displays the Kansas City launch dataset. For live data, create a Supabase project and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Never put a secret/service-role key in a browser environment variable.
+Open `http://localhost:3000`. Without environment values the app displays the Kansas City launch dataset. For live data, use the connected Supabase project at `https://xtpqniktirazzsnzfjqu.supabase.co` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Never put a secret/service-role key in a browser environment variable.
 
 For a real company test, open `/pilot` and follow [PILOT_TEST.md](./PILOT_TEST.md).
 
@@ -39,11 +39,12 @@ Set `NEXT_PUBLIC_APP_URL` to the final hosted URL so metadata, sharing previews,
 
 ## Set up Supabase
 
-1. Create a Supabase project and enable email/password authentication.
-2. In the SQL editor, run `supabase/migrations/20260630000000_initial_schema.sql`.
-3. Run `supabase/seed.sql` if you want the fictional demo records.
-4. Create a user in Auth, copy its UUID, and run the commented membership insert at the bottom of `seed.sql`.
-5. Set the two public environment variables, restart the app, and replace the demo-data reads with Supabase queries as screens are made production-live.
+1. Use the connected Supabase project: `https://xtpqniktirazzsnzfjqu.supabase.co`.
+2. Enable email/password authentication in Supabase Auth.
+3. In the SQL editor, run `supabase/migrations/20260630000000_initial_schema.sql`.
+4. Then run `supabase/migrations/20260708000000_internal_crm_upgrade.sql`.
+5. Run `supabase/seed.sql` only if you want the fictional demo records.
+6. Set the two public environment variables, restart or redeploy the app, and sign in at `/login`. The app calls `bootstrap_shawnee_workspace()` to create the Shawnee Steel & Welding workspace for the authenticated user.
 
 For Supabase CLI development, initialize/link the project and use the normal migration workflow (`supabase db reset`, then `supabase db push`). The migration explicitly grants Data API access because new Supabase projects no longer expose new public tables automatically. Every exposed table also has RLS enabled.
 
@@ -79,7 +80,9 @@ app/
 
 ## Production checklist
 
-- Apply `supabase/migrations/20260708000000_internal_crm_upgrade.sql` before enabling real Supabase login.
+- Apply both migrations in order before enabling real Supabase login:
+  1. `supabase/migrations/20260630000000_initial_schema.sql`
+  2. `supabase/migrations/20260708000000_internal_crm_upgrade.sql`
 - Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel.
 - Use `/login` to create/sign into an email/password account; the app calls `bootstrap_shawnee_workspace()` to create the Shawnee Steel & Welding workspace and shop profile for the first authenticated user.
 - Use `/shop-profile` to tune trade scopes, radius, project size, certifications, and contact info.
