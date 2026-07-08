@@ -13,44 +13,54 @@ function downloadCsv(rows: string[]) {
 }
 
 export default function ReportsPage() {
-  const { bids, companies, followUps, outreachLogs } = useFabLeadStore();
+  const { bids, companies, contacts, followUps, outreachLogs } = useFabLeadStore();
   const now = new Date();
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - now.getDay());
   weekStart.setHours(0, 0, 0, 0);
   const thisWeek = weekStart.toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
+  const nextWeek = new Date(now);
+  nextWeek.setDate(now.getDate() + 7);
+  const nextWeekDate = nextWeek.toISOString().slice(0, 10);
+
+  const contactedCompanyNames = new Set(outreachLogs.filter((log) => log.date >= thisWeek).map((log) => log.company));
+  const nextPriorities = [
+    ...followUps.filter((followUp) => followUp.status !== "Completed" && followUp.due && followUp.due <= nextWeekDate).map((followUp) => `${followUp.company}: ${followUp.task} (${followUp.due})`),
+    ...companies.filter((company) => company.next_action && company.next_action_due_date && company.next_action_due_date <= nextWeekDate).map((company) => `${company.company_name}: ${company.next_action} (${company.next_action_due_date})`),
+  ].slice(0, 8);
 
   const metrics = [
-    ["Buyers added this week", companies.filter((company) => (company.data_verified_at || "") >= thisWeek).length],
-    ["Outreach completed", outreachLogs.filter((log) => log.date >= thisWeek).length],
-    ["Follow-ups overdue", followUps.filter((followUp) => followUp.status !== "Complete" && followUp.due && followUp.due < now.toISOString().slice(0, 10)).length],
-    ["Portals registered", outreachLogs.filter((log) => log.type === "Portal Registration" && log.date >= thisWeek).length],
-    ["Bid opportunities found", bids.filter((bid) => bid.status === "Found" || bid.status === "Open").length],
+    ["Companies contacted this week", contactedCompanyNames.size],
+    ["Follow-ups completed", followUps.filter((followUp) => followUp.status === "Completed").length],
+    ["Overdue follow-ups", followUps.filter((followUp) => followUp.status !== "Completed" && followUp.due && followUp.due < today).length],
+    ["New contacts added", contacts.filter((contact) => (contact.next_follow_up_at || "") >= thisWeek).length],
+    ["Bid-list registrations completed", outreachLogs.filter((log) => log.type === "Portal Registration" && log.date >= thisWeek).length + companies.filter((company) => company.lead_status === "Registered").length],
+    ["Bid opportunities added", bids.filter((bid) => bid.status === "Found" || bid.status === "Reviewing").length],
     ["Bid invites received", companies.filter((company) => company.lead_status === "Bid Invite Received").length],
     ["Bids submitted", bids.filter((bid) => bid.status === "Submitted").length],
-    ["Won bids", bids.filter((bid) => bid.status === "Won").length],
-    ["Lost bids", bids.filter((bid) => bid.status === "Lost").length],
-    ["No-bid results", bids.filter((bid) => bid.status === "No-Bid" || bid.status === "No Bid").length],
+    ["Won/Lost/No-Bid results", bids.filter((bid) => ["Won", "Lost", "No-Bid"].includes(bid.status)).length],
   ] as const;
 
   function exportReport() {
-    downloadCsv(["metric,value", ...metrics.map(([label, value]) => `"${label}",${value}`)]);
+    downloadCsv(["metric,value", ...metrics.map(([label, value]) => `"${label}",${value}`), "", "next_week_top_priorities", ...nextPriorities.map((item) => `"${item.replaceAll("\"", "\"\"")}"`)]);
   }
 
   return (
     <>
-      <PageHeader
-        eyebrow="Owner reporting"
-        title="Weekly Owner Report"
-        description="A simple snapshot of business development activity and bid pipeline health."
-        action={<button onClick={exportReport} className="rounded-xl bg-steel px-4 py-2.5 text-sm font-semibold text-white"><span className="flex items-center gap-2"><Download size={15} />Export CSV</span></button>}
-      />
+      <PageHeader eyebrow="Owner reporting" title="Weekly Owner Report" description="A simple snapshot of business development activity and what needs to happen next." action={<button onClick={exportReport} className="rounded-xl bg-steel px-4 py-2.5 text-sm font-semibold text-white"><span className="flex items-center gap-2"><Download size={15} />Export CSV</span></button>} />
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {metrics.map(([label, value]) => <div key={label} className="card p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-3 text-3xl font-semibold">{value}</p></div>)}
       </section>
       <section className="card mt-6 p-6">
+        <h2 className="font-serif text-xl font-semibold">Next week’s top priorities</h2>
+        <div className="mt-4 space-y-2">
+          {nextPriorities.length ? nextPriorities.map((priority) => <div key={priority} className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">{priority}</div>) : <p className="text-sm text-slate-500">No urgent priorities scheduled. Add next actions on Companies or Follow-Ups.</p>}
+        </div>
+      </section>
+      <section className="card mt-6 p-6">
         <h2 className="font-serif text-xl font-semibold">Owner notes</h2>
-        <p className="mt-2 text-sm leading-relaxed text-slate-500">Use this report in a weekly 15-minute sales meeting: what buyers were added, who was contacted, what follow-ups are overdue, and which bid opportunities need a go/no-go decision.</p>
+        <p className="mt-2 text-sm leading-relaxed text-slate-500">Use this in a weekly 15-minute sales meeting: who was contacted, which bid-list registrations moved forward, what is overdue, and which bid opportunities need a go/no-go decision.</p>
         <button onClick={() => window.print()} className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">Export PDF</button>
       </section>
     </>

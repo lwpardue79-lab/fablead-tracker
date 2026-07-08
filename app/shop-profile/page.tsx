@@ -32,6 +32,10 @@ export default function ShopProfilePage() {
         <label className="text-xs font-semibold text-slate-600">Maximum project size<input className="field mt-1.5" type="number" value={profile.maximumProjectSize} onChange={(event) => setProfile({ ...profile, maximumProjectSize: Number(event.target.value) })} /></label>
         <label className="text-xs font-semibold text-slate-600 lg:col-span-2">Insurance/certification notes<textarea className="field mt-1.5" rows={3} value={profile.insuranceCertificationNotes} onChange={(event) => setProfile({ ...profile, insuranceCertificationNotes: event.target.value })} /></label>
         <label className="text-xs font-semibold text-slate-600">Primary contact<input className="field mt-1.5" value={profile.primaryContact} onChange={(event) => setProfile({ ...profile, primaryContact: event.target.value })} /></label>
+        <label className="text-xs font-semibold text-slate-600">Phone<input className="field mt-1.5" value={profile.phone || ""} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} /></label>
+        <label className="text-xs font-semibold text-slate-600">Email<input className="field mt-1.5" value={profile.email || ""} onChange={(event) => setProfile({ ...profile, email: event.target.value })} /></label>
+        <label className="text-xs font-semibold text-slate-600">Website<input className="field mt-1.5" value={profile.website || ""} onChange={(event) => setProfile({ ...profile, website: event.target.value })} /></label>
+        <label className="text-xs font-semibold text-slate-600 lg:col-span-2">Past project examples<textarea className="field mt-1.5" rows={3} value={profile.pastProjectExamples || ""} onChange={(event) => setProfile({ ...profile, pastProjectExamples: event.target.value })} /></label>
         <div className="lg:col-span-2"><button className="rounded-xl bg-steel px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Save shop profile</button></div>
       </form>
     </>

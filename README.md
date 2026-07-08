@@ -26,6 +26,7 @@ pnpm dev
 Open `http://localhost:3000`. Without environment values the app displays the Kansas City launch dataset. For live data, use the connected Supabase project at `https://xtpqniktirazzsnzfjqu.supabase.co` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Never put a secret/service-role key in a browser environment variable.
 
 For a real company test, open `/pilot` and follow [PILOT_TEST.md](./PILOT_TEST.md).
+Before a one-week pilot, run the manual QA checklist in [MANUAL_QA_CHECKLIST.md](./MANUAL_QA_CHECKLIST.md).
 
 ## Public demo URL
 

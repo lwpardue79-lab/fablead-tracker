@@ -6,19 +6,23 @@ import { Badge, PageHeader } from "@/components/ui";
 import { useFabLeadStore } from "@/lib/local-store";
 
 function isOpenBid(status: string) {
-  return ["Open", "Submitted"].includes(status);
+  return ["Found", "Reviewing", "Bidding", "Submitted", "Open"].includes(status);
 }
 
 export default function Dashboard() {
   const { bids, companies, contacts, followUps, workspaceSettings } = useFabLeadStore();
-  const openFollowUps = followUps.filter((followUp) => followUp.status !== "Complete");
+  const today = new Date().toISOString().slice(0, 10);
+  const openFollowUps = followUps.filter((followUp) => followUp.status === "Open" || followUp.status === "Snoozed");
   const openBids = bids.filter((bid) => isOpenBid(bid.status));
+  const overdueFollowUps = openFollowUps.filter((followUp) => followUp.due && followUp.due < today);
+  const overdueCompanyActions = companies.filter((company) => company.next_action_due_date && company.next_action_due_date < today);
   const averageScore = companies.length ? Math.round(companies.reduce((sum, company) => sum + company.lead_score, 0) / companies.length) : 0;
   const registrationReady = companies.filter((company) => {
     const status = `${company.invite_list_status || ""} ${company.prequalification_url || ""} ${company.bid_portal_url || ""}`.toLowerCase();
     return ["registration", "portal", "prequalification", "trade partner", "public bid"].some((term) => status.includes(term));
   }).length;
   const totalBidValue = openBids.reduce((sum, bid) => sum + bid.value, 0);
+  const weightedValue = openBids.reduce((sum, bid) => sum + bid.value * (bid.probability / 100), 0);
   const topLeads = [...companies].sort((a, b) => b.lead_score - a.lead_score).slice(0, 5);
 
   const metrics = [
@@ -26,8 +30,8 @@ export default function Dashboard() {
     ["Contacts", String(contacts.length), "Imported or manually added", Users],
     ["Bid-list paths", String(registrationReady), "Registration or portal found", Target],
     ["Open bid value", `$${totalBidValue.toLocaleString()}`, "Tracked opportunities", CircleDollarSign],
-    ["Open follow-ups", String(openFollowUps.length), "Needs attention", CalendarClock],
-    ["Average fit", String(averageScore), "Auto-scored leads", TrendingUp],
+    ["Weighted value", `$${Math.round(weightedValue).toLocaleString()}`, "Probability-adjusted", TrendingUp],
+    ["Overdue actions", String(overdueFollowUps.length + overdueCompanyActions.length), "Needs owner attention", CalendarClock],
   ] as const;
 
   return (
@@ -44,10 +48,19 @@ export default function Dashboard() {
             <div className="mb-4 flex items-center justify-between"><Icon size={17} className="text-moss" /><span className="size-1.5 rounded-full bg-emerald-400" /></div>
             <p className="text-2xl font-semibold tracking-tight">{value}</p>
             <p className="mt-1 text-xs font-semibold text-slate-700">{label}</p>
-            <p className={`mt-2 text-[11px] ${label === "Open follow-ups" && openFollowUps.length ? "text-red-600" : "text-slate-400"}`}>{sub}</p>
+            <p className={`mt-2 text-[11px] ${label === "Overdue actions" && (overdueFollowUps.length + overdueCompanyActions.length) ? "text-red-600" : "text-slate-400"}`}>{sub}</p>
           </div>
         ))}
       </section>
+      {(overdueFollowUps.length > 0 || overdueCompanyActions.length > 0) && (
+        <section className="card mt-6 border-red-200 bg-red-50/60 p-5">
+          <h2 className="font-serif text-lg font-semibold text-red-900">Overdue actions</h2>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {overdueCompanyActions.slice(0, 6).map((company) => <Link key={company.company_id} href={`/companies/${company.company_id}`} className="rounded-lg bg-white p-3 text-sm shadow-sm"><span className="font-semibold">{company.company_name}</span><p className="mt-1 text-xs text-red-600">{company.next_action} · due {company.next_action_due_date}</p></Link>)}
+            {overdueFollowUps.slice(0, 6).map((followUp) => <Link key={followUp.id} href="/follow-ups" className="rounded-lg bg-white p-3 text-sm shadow-sm"><span className="font-semibold">{followUp.task}</span><p className="mt-1 text-xs text-red-600">{followUp.company} · due {followUp.due}</p></Link>)}
+          </div>
+        </section>
+      )}
       <section className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 p-5">
@@ -74,7 +87,7 @@ export default function Dashboard() {
           <div className="divide-y divide-slate-100">
             {openFollowUps.slice(0, 5).map((followUp) => (
               <div key={followUp.id} className="p-5">
-                <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{followUp.task}</p><p className="mt-1 text-xs text-slate-400">{followUp.company} · {followUp.contact}</p></div><Badge tone={followUp.priority === "High" ? "red" : "orange"}>{followUp.due || followUp.priority}</Badge></div>
+                <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{followUp.task}</p><p className="mt-1 text-xs text-slate-400">{followUp.company} · {followUp.contact}</p></div><Badge tone={followUp.due && followUp.due < today ? "red" : followUp.priority === "High" ? "orange" : "slate"}>{followUp.due || followUp.priority}</Badge></div>
               </div>
             ))}
             {!openFollowUps.length && <div className="p-8 text-center text-sm text-slate-500">No open follow-ups. Add one after your next buyer call.</div>}

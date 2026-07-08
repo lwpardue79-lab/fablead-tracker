@@ -25,7 +25,13 @@ Insurance / certifications / notes:
 ${shopProfile.insuranceCertificationNotes}
 
 Primary contact:
-${shopProfile.primaryContact}`, [shopProfile]);
+${shopProfile.primaryContact}
+${shopProfile.phone ? `Phone: ${shopProfile.phone}` : ""}
+${shopProfile.email ? `Email: ${shopProfile.email}` : ""}
+${shopProfile.website ? `Website: ${shopProfile.website}` : ""}
+
+Past project examples:
+${shopProfile.pastProjectExamples || "Add examples in Shop Profile."}`, [shopProfile]);
 
   const introEmail = `Subject: Fabrication support from ${shopProfile.shopName}
 
@@ -51,6 +57,39 @@ Please send any prequalification forms, portal registration links, or estimator 
 Thank you,
 ${shopProfile.primaryContact}`;
 
+  const prequalFollowUp = `Subject: Prequalification follow-up — ${shopProfile.shopName}
+
+Hello,
+
+I’m following up on our request to prequalify ${shopProfile.shopName} for upcoming work. We can support ${shopProfile.tradeScopes.join(", ")} within ${shopProfile.serviceRadius} of ${shopProfile.targetCitiesStates}.
+
+Could you let me know if anything else is needed to complete registration or be added to the correct estimating list?
+
+Thank you,
+${shopProfile.primaryContact}`;
+
+  const estimatingContactEmail = `Subject: Who handles estimating for steel / misc metals?
+
+Hello,
+
+I’m trying to reach the right estimating or preconstruction contact for ${shopProfile.tradeScopes.join(", ")} scopes.
+
+Could you point me to the person or email address that handles bid invites and prequalification for these scopes?
+
+Thank you,
+${shopProfile.primaryContact}`;
+
+  const noResponseFollowUp = `Subject: Following up — fabrication bid list request
+
+Hello,
+
+I wanted to follow up in case my earlier note got buried. ${shopProfile.shopName} is interested in being considered for upcoming ${shopProfile.tradeScopes.join(", ")} opportunities.
+
+If there is a portal, prequalification form, or estimating contact we should use, please send it over and I’ll get it completed.
+
+Thank you,
+${shopProfile.primaryContact}`;
+
   async function copy(text: string) {
     await navigator.clipboard.writeText(text);
     setMessage("Copied to clipboard.");
@@ -58,10 +97,10 @@ ${shopProfile.primaryContact}`;
 
   return (
     <>
-      <PageHeader eyebrow="Sales templates" title="Capability Statement Generator" description="Generate simple, practical outreach materials from the shop profile." />
+      <PageHeader eyebrow="Sales templates" title="Capability Statement & Email Templates" description="Generate simple, practical outreach materials from the shop profile." />
       {message && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</div>}
       <div className="grid gap-6 xl:grid-cols-3">
-        {[["One-page capability statement", capability], ["Intro email template", introEmail], ["Bid-list request email", bidListEmail]].map(([title, text]) => (
+        {[["One-page capability statement", capability], ["Capability intro email", introEmail], ["Bid-list request email", bidListEmail], ["Prequalification follow-up", prequalFollowUp], ["Ask who handles estimating", estimatingContactEmail], ["No-response follow-up", noResponseFollowUp]].map(([title, text]) => (
           <section key={title} className="card flex flex-col p-5">
             <h2 className="font-serif text-lg font-semibold">{title}</h2>
             <pre className="mt-4 min-h-96 flex-1 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">{text}</pre>

@@ -4,7 +4,7 @@ import { ChangeEvent, useRef, useState } from "react";
 import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import { PageHeader } from "@/components/ui";
 import { csvRowsToImportData, parseCsv, useFabLeadStore } from "@/lib/local-store";
-import { Company, Contact } from "@/lib/types";
+import { Bid, Company, Contact, FollowUp } from "@/lib/types";
 
 const exportColumns: (keyof Company)[] = [
   "company_name",
@@ -40,11 +40,14 @@ function csvCell(value: unknown) {
 
 export default function ImportExport() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { companies, importCompanies, importContacts } = useFabLeadStore();
+  const { addBid, addFollowUp, bids, companies, contacts, followUps, importCompanies, importContacts, outreachLogs } = useFabLeadStore();
   const [fileName, setFileName] = useState("");
   const [pastedCsv, setPastedCsv] = useState("");
   const [pendingCompanies, setPendingCompanies] = useState<Company[]>([]);
   const [pendingContacts, setPendingContacts] = useState<Contact[]>([]);
+  const [pendingBids, setPendingBids] = useState<Omit<Bid, "id">[]>([]);
+  const [pendingFollowUps, setPendingFollowUps] = useState<Omit<FollowUp, "id">[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -55,6 +58,10 @@ export default function ImportExport() {
     ]);
   }
 
+  function exportRows<T extends Record<string, any>>(fileName: string, records: T[], columns: string[]) {
+    downloadCsv(fileName, [columns.join(","), ...records.map((record) => columns.map((column) => csvCell(record[column])).join(","))]);
+  }
+
   function exportAll() {
     const rows = [
       exportColumns.join(","),
@@ -63,6 +70,52 @@ export default function ImportExport() {
     downloadCsv("fablead-companies-export.csv", rows);
     setMessage(`Exported ${companies.length} companies.`);
     setError("");
+  }
+
+  function exportAllData() {
+    exportRows("fablead-contacts-export.csv", contacts as any, ["first_name", "last_name", "title", "email", "phone", "contact_type", "source", "confidence_level"]);
+    exportRows("fablead-outreach-export.csv", outreachLogs as any, ["date", "company", "contact", "type", "result", "notes", "nextFollowUpDate"]);
+    exportRows("fablead-followups-export.csv", followUps as any, ["company", "contact", "task", "due", "priority", "task_type", "status", "notes"]);
+    exportRows("fablead-bids-export.csv", bids as any, ["project", "company", "type", "location", "value", "due", "probability", "status", "source_url", "notes"]);
+    setMessage("Exported contacts, outreach, follow-ups, and bids CSV files.");
+  }
+
+  function parseExtraImports(rows: Record<string, string>[]) {
+    const parsedBids: Omit<Bid, "id">[] = [];
+    const parsedFollowUps: Omit<FollowUp, "id">[] = [];
+    rows.forEach((row) => {
+      const companyName = row.company_name || row.company || row.buyer || "";
+      const company = companies.find((item) => item.company_name.toLowerCase() === companyName.toLowerCase());
+      if (row.project_name || row.bid_project || row.project) {
+        parsedBids.push({
+          company: company?.company_name || companyName,
+          company_id: company?.company_id,
+          project: row.project_name || row.bid_project || row.project,
+          type: row.scope || row.project_type || "Miscellaneous Metals",
+          location: row.location || "",
+          value: Number(row.estimated_value || row.value || 0),
+          due: row.bid_due_date || row.due_date || "",
+          status: row.bid_status || "Found",
+          probability: Number(row.probability || row.probability_to_win || 25),
+          source_url: row.source_link || row.source_url || "",
+          notes: row.bid_notes || row.notes || "",
+        });
+      }
+      if (row.follow_up_task || row.task || row.next_action) {
+        parsedFollowUps.push({
+          company: company?.company_name || companyName,
+          company_id: company?.company_id,
+          contact: row.contact_name || "",
+          task: row.follow_up_task || row.task || row.next_action,
+          due: row.follow_up_due_date || row.due_date || row.next_action_due_date || "",
+          priority: row.priority || "Medium",
+          status: row.follow_up_status || "Open",
+          task_type: row.task_type || "Imported",
+          notes: row.follow_up_notes || "",
+        });
+      }
+    });
+    return { parsedBids, parsedFollowUps };
   }
 
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
@@ -78,13 +131,18 @@ export default function ImportExport() {
       const text = await file.text();
       const rows = parseCsv(text);
       const parsed = csvRowsToImportData(rows);
-      if (!parsed.companies.length) {
-        setError("No companies found. Make sure your CSV has a company_name, company, or buyer column.");
+      const extras = parseExtraImports(rows);
+      const duplicateExisting = parsed.companies.filter((item) => companies.some((company) => company.company_name.toLowerCase() === item.company_name.toLowerCase())).map((item) => item.company_name);
+      if (!parsed.companies.length && !extras.parsedBids.length && !extras.parsedFollowUps.length) {
+        setError("No importable records found. Make sure your CSV has company_name, project_name, or follow_up_task columns.");
         return;
       }
       setPendingCompanies(parsed.companies);
       setPendingContacts(parsed.contacts);
-      setMessage(`Ready to import ${parsed.companies.length} companies and ${parsed.contacts.length} contacts from ${file.name}.`);
+      setPendingBids(extras.parsedBids);
+      setPendingFollowUps(extras.parsedFollowUps);
+      setWarnings([...parsed.errors, ...parsed.duplicateNames.map((name) => `Duplicate in file: ${name}`), ...duplicateExisting.map((name) => `Already exists: ${name}`)]);
+      setMessage(`Ready to import ${parsed.companies.length} companies, ${parsed.contacts.length} contacts, ${extras.parsedBids.length} bids, and ${extras.parsedFollowUps.length} follow-ups from ${file.name}.`);
     } catch {
       setError("Could not read this CSV. Please try a standard UTF-8 comma-separated file.");
     }
@@ -95,27 +153,42 @@ export default function ImportExport() {
     setError("");
     setPendingCompanies([]);
     setPendingContacts([]);
-    const parsed = csvRowsToImportData(parseCsv(pastedCsv));
-    if (!parsed.companies.length) {
-      setError("No companies found. Paste CSV with a company_name, company, or buyer column.");
+    const rows = parseCsv(pastedCsv);
+    const parsed = csvRowsToImportData(rows);
+    const extras = parseExtraImports(rows);
+    const duplicateExisting = parsed.companies.filter((item) => companies.some((company) => company.company_name.toLowerCase() === item.company_name.toLowerCase())).map((item) => item.company_name);
+    if (!parsed.companies.length && !extras.parsedBids.length && !extras.parsedFollowUps.length) {
+      setError("No importable records found. Paste CSV with company_name, project_name, or follow_up_task columns.");
       return;
     }
     setPendingCompanies(parsed.companies);
     setPendingContacts(parsed.contacts);
+    setPendingBids(extras.parsedBids);
+    setPendingFollowUps(extras.parsedFollowUps);
+    setWarnings([...parsed.errors, ...parsed.duplicateNames.map((name) => `Duplicate in file: ${name}`), ...duplicateExisting.map((name) => `Already exists: ${name}`)]);
     setFileName("Pasted CSV");
-    setMessage(`Ready to import ${parsed.companies.length} companies and ${parsed.contacts.length} contacts from pasted CSV.`);
+    setMessage(`Ready to import ${parsed.companies.length} companies, ${parsed.contacts.length} contacts, ${extras.parsedBids.length} bids, and ${extras.parsedFollowUps.length} follow-ups from pasted CSV.`);
   }
 
   function commitImport() {
-    if (!pendingCompanies.length) return;
-    importCompanies(pendingCompanies);
+    if (!pendingCompanies.length && !pendingBids.length && !pendingFollowUps.length) return;
+    if (pendingCompanies.length) importCompanies(pendingCompanies);
     if (pendingContacts.length) importContacts(pendingContacts);
-    setMessage(`Imported ${pendingCompanies.length} companies and ${pendingContacts.length} contacts. Dashboard, Companies, and Contacts are updated.`);
+    pendingBids.forEach((bid) => addBid(bid));
+    pendingFollowUps.forEach((followUp) => addFollowUp(followUp));
+    setMessage(`Imported ${pendingCompanies.length} companies, ${pendingContacts.length} contacts, ${pendingBids.length} bids, and ${pendingFollowUps.length} follow-ups.`);
+    cancelImport();
+    setError("");
+  }
+
+  function cancelImport() {
     setPendingCompanies([]);
     setPendingContacts([]);
+    setPendingBids([]);
+    setPendingFollowUps([]);
+    setWarnings([]);
     setFileName("");
     if (inputRef.current) inputRef.current.value = "";
-    setError("");
   }
 
   return (
@@ -124,6 +197,7 @@ export default function ImportExport() {
 
       {message && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</div>}
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
+      {warnings.length > 0 && <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700"><p>Review before importing:</p><ul className="mt-2 list-disc pl-5">{warnings.slice(0, 8).map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card p-6">
@@ -145,13 +219,14 @@ export default function ImportExport() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button onClick={template} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Download template</button>
             <button onClick={parsePastedCsv} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Preview pasted CSV</button>
-            {pendingCompanies.length > 0 && <button onClick={commitImport} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Import {pendingCompanies.length} buyers + {pendingContacts.length} contacts</button>}
+            {(pendingCompanies.length > 0 || pendingBids.length > 0 || pendingFollowUps.length > 0) && <button onClick={commitImport} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Import previewed records</button>}
+            {(pendingCompanies.length > 0 || pendingBids.length > 0 || pendingFollowUps.length > 0) && <button onClick={cancelImport} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel import</button>}
           </div>
 
           {pendingCompanies.length > 0 && (
             <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-ink">Preview</p>
-              <p className="mt-1 text-xs text-slate-400">Fit scores are recalculated automatically from buyer fit, bid-list path, contact info, and source quality.</p>
+              <p className="mt-1 text-xs text-slate-400">{pendingCompanies.length} companies · {pendingContacts.length} contacts · {pendingBids.length} bids · {pendingFollowUps.length} follow-ups. Fit scores are recalculated automatically.</p>
               <div className="mt-3 space-y-2 text-sm text-slate-600">
                 {pendingCompanies.slice(0, 5).map((company) => (
                   <div key={company.company_id} className="flex justify-between gap-4">
@@ -170,9 +245,11 @@ export default function ImportExport() {
           <p className="mt-1 text-sm leading-relaxed text-slate-500">Download your company data as a standard CSV. Your data is never locked in.</p>
           <div className="mt-6 rounded-lg bg-slate-50 p-4 text-sm">
             <div className="flex justify-between"><span>Companies</span><strong>{companies.length} records</strong></div>
-            <div className="mt-3 flex justify-between"><span>Storage</span><strong>Browser pilot data</strong></div>
+            <div className="mt-3 flex justify-between"><span>Contacts</span><strong>{contacts.length} records</strong></div>
+            <div className="mt-3 flex justify-between"><span>Follow-ups</span><strong>{followUps.length} records</strong></div>
+            <div className="mt-3 flex justify-between"><span>Bids</span><strong>{bids.length} records</strong></div>
           </div>
-          <button onClick={exportAll} className="mt-4 rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Export companies CSV</button>
+          <div className="mt-4 flex flex-wrap gap-2"><button onClick={exportAll} className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Export companies CSV</button><button onClick={exportAllData} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Export contacts/outreach/follow-ups/bids</button></div>
         </section>
       </div>
     </>

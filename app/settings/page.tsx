@@ -1,12 +1,13 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { defaultWorkspaceSettings, useFabLeadStore } from "@/lib/local-store";
 import { WorkspaceSettings } from "@/lib/types";
 
 export default function Settings() {
-  const { resetPilotData, updateWorkspaceSettings, workspaceSettings } = useFabLeadStore();
+  const { deletedItems, resetPilotData, storageStatus, updateWorkspaceSettings, workspaceSettings } = useFabLeadStore();
   const [settings, setSettings] = useState<WorkspaceSettings>(defaultWorkspaceSettings);
   const [message, setMessage] = useState("");
 
@@ -34,6 +35,9 @@ export default function Settings() {
     <>
       <PageHeader eyebrow="Workspace" title="Settings" description="Set the company identity, service region, and scoring preferences for this sales workspace." />
       {message && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</div>}
+      <div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-semibold ${storageStatus === "Database connected" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
+        {storageStatus}
+      </div>
       <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <form onSubmit={saveSettings} className="card p-6">
           <h2 className="font-serif text-xl font-semibold">Business details</h2>
@@ -71,6 +75,11 @@ export default function Settings() {
               </div>
             ))}
           </div>
+        </section>
+        <section className="card p-6 lg:col-span-2">
+          <h2 className="font-serif text-xl font-semibold">Admin</h2>
+          <p className="mt-1 text-sm text-slate-500">Restore archived records or permanently delete records only when you are sure.</p>
+          <Link href="/settings/deleted-items" className="mt-4 inline-flex rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Deleted Items ({deletedItems.length})</Link>
         </section>
       </div>
     </>
