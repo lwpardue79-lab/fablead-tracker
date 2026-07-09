@@ -17,6 +17,10 @@ const checklistItems = [
   ["reportGenerated", "Report generated"],
   ["csvExportTested", "CSV export tested"],
   ["pdfExportTested", "PDF export tested"],
+  ["contactDetailOpened", "Contact detail opened"],
+  ["bidDetailOpened", "Bid detail opened"],
+  ["companyLinksTested", "Company links tested"],
+  ["tableButtonsTested", "Table edit/delete buttons tested"],
 ] as const;
 
 type ChecklistKey = typeof checklistItems[number][0];
@@ -81,7 +85,7 @@ export default function TestModeChecklistPage() {
         </div>
 
         <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-slate-600">
-          Recommended test path: open a company, edit it, add a contact, log outreach with a next follow-up date, complete that follow-up, add and edit a bid, archive one test record, restore it from Deleted Items, then export the weekly report as CSV and PDF.
+          Recommended test path: open a company, edit it, add a contact, open the contact detail page from the Contacts table, log outreach with a next follow-up date, complete that follow-up, add and edit a bid, open the bid detail page from the Bids table, confirm company links open Company Detail, archive one test record, restore it from Deleted Items, then export the weekly report as CSV and PDF.
         </p>
       </section>
     </>

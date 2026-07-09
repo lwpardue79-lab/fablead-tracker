@@ -1,12 +1,15 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge, Button, PageHeader } from "@/components/ui";
 import { contactTypes, useFabLeadStore } from "@/lib/local-store";
 import { Contact } from "@/lib/types";
 
 export default function Contacts() {
   const { addContact, archiveContact, companies, contacts, updateContact } = useFabLeadStore();
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState("");
@@ -88,7 +91,18 @@ export default function Contacts() {
         </form>
       )}
       <div className="card mb-4 p-3"><input className="field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, company, title, email, phone, or contact type..." /></div>
-      <div className="table-shell overflow-x-auto"><table><thead><tr><th>Name</th><th>Company</th><th>Role</th><th>Email / phone</th><th>Confidence</th><th>Next follow-up</th><th>Actions</th></tr></thead><tbody>{rows.map((contact) => <tr key={contact.contact_id}><td className="font-semibold text-ink">{contact.first_name} {contact.last_name}<p className="text-xs text-slate-400">{contact.title}</p></td><td>{companies.find((company) => company.company_id === contact.company_id)?.company_name}</td><td><Badge>{contact.contact_type || "unknown"}</Badge>{contact.decision_maker && <span className="ml-1"><Badge tone="green">Decision maker</Badge></span>}</td><td>{contact.email ? <a className="text-brand" href={`mailto:${contact.email}`}>{contact.email}</a> : "—"}<p className="text-xs text-slate-400">{contact.phone}</p></td><td>{contact.confidence_level || "Medium"}</td><td>{contact.next_follow_up_at || "—"}</td><td><div className="flex gap-2"><button onClick={() => setEditingId(editingId === contact.contact_id ? "" : contact.contact_id)} className="rounded-md border px-2 py-1 text-xs font-semibold">Edit</button><button onClick={() => archive(contact)} className="rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700">Delete</button></div></td></tr>)}</tbody></table></div>
+      <div className="table-shell overflow-x-auto"><table><thead><tr><th>Name</th><th>Company</th><th>Role</th><th>Email / phone</th><th>Confidence</th><th>Next follow-up</th><th>Actions</th></tr></thead><tbody>{rows.map((contact) => {
+        const company = companies.find((item) => item.company_id === contact.company_id);
+        const contactName = `${contact.first_name} ${contact.last_name}`.trim() || contact.email || "Unnamed contact";
+        return <tr key={contact.contact_id} onClick={() => router.push(`/contacts/${contact.contact_id}`)} className="cursor-pointer hover:bg-slate-50">
+          <td className="font-semibold text-ink"><Link onClick={(event) => event.stopPropagation()} href={`/contacts/${contact.contact_id}`} className="hover:text-brand hover:underline">{contactName}</Link><p className="text-xs text-slate-400">{contact.title || "Not added yet"}</p></td>
+          <td>{company ? <Link onClick={(event) => event.stopPropagation()} href={`/companies/${company.company_id}`} className="font-semibold text-brand hover:underline">{company.company_name}</Link> : "Not added yet"}</td>
+          <td><Badge>{contact.contact_type || "unknown"}</Badge>{contact.decision_maker && <span className="ml-1"><Badge tone="green">Decision maker</Badge></span>}</td>
+          <td>{contact.email ? <a onClick={(event) => event.stopPropagation()} className="text-brand" href={`mailto:${contact.email}`}>{contact.email}</a> : "Not added yet"}<p className="text-xs text-slate-400">{contact.phone || "Not added yet"}</p></td>
+          <td>{contact.confidence_level || "Medium"}</td><td>{contact.next_follow_up_at || "Not added yet"}</td>
+          <td><div className="flex gap-2"><button onClick={(event) => { event.stopPropagation(); setEditingId(editingId === contact.contact_id ? "" : contact.contact_id); }} className="rounded-md border px-2 py-1 text-xs font-semibold">Edit</button><button onClick={(event) => { event.stopPropagation(); archive(contact); }} className="rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700">Delete</button></div></td>
+        </tr>;
+      })}</tbody></table></div>
       {editingId && contacts.filter((contact) => contact.contact_id === editingId).map((contact) => (
         <form key={contact.contact_id} onSubmit={(event) => saveEdit(event, contact)} className="card mt-5 grid gap-3 p-5 md:grid-cols-2">
           <h2 className="font-serif text-xl font-semibold md:col-span-2">Edit contact</h2>

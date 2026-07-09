@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge, Button, PageHeader } from "@/components/ui";
 import { bidStatuses, useFabLeadStore } from "@/lib/local-store";
 import { Bid } from "@/lib/types";
@@ -11,6 +13,7 @@ function isOpenBid(status: string) {
 
 export default function Bids() {
   const { addBid, archiveBid, bids, companies, contacts, updateBid } = useFabLeadStore();
+  const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
@@ -99,7 +102,15 @@ export default function Bids() {
         </form>
       )}
       <div className="mb-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-6"><div className="card p-5"><p className="text-xs font-bold uppercase text-slate-400">Open bids</p><p className="mt-2 text-2xl font-semibold">{openBids.length}</p></div><div className="card p-5"><p className="text-xs font-bold uppercase text-slate-400">Open value</p><p className="mt-2 text-2xl font-semibold">${totalValue.toLocaleString()}</p></div><div className="card p-5"><p className="text-xs font-bold uppercase text-slate-400">Weighted value</p><p className="mt-2 text-2xl font-semibold">${Math.round(weightedValue).toLocaleString()}</p></div><div className="card p-5"><p className="text-xs font-bold uppercase text-slate-400">Due this week</p><p className="mt-2 text-2xl font-semibold">{dueThisWeek}</p></div><div className="card p-5"><p className="text-xs font-bold uppercase text-slate-400">Submitted</p><p className="mt-2 text-2xl font-semibold">{submitted}</p></div><div className="card p-5"><p className="text-xs font-bold uppercase text-slate-400">Results</p><p className="mt-2 text-2xl font-semibold">{results}</p></div></div>
-      {bids.length ? <div className="table-shell overflow-x-auto"><table><thead><tr><th>Project</th><th>Company</th><th>Scope</th><th>Due</th><th>Value</th><th>Weighted</th><th>Status</th><th>Actions</th></tr></thead><tbody>{bids.map((bid) => <tr key={bid.id}><td className="font-semibold text-ink">{bid.project}<p className="text-xs text-slate-400">{bid.location}</p></td><td>{bid.company}</td><td>{bid.type}</td><td>{bid.due || "—"}</td><td>${bid.value.toLocaleString()}</td><td>${Math.round(bid.value * (bid.probability / 100)).toLocaleString()}</td><td><Badge tone={bid.status === "Submitted" ? "blue" : isOpenBid(bid.status) ? "green" : bid.status === "Lost" || bid.status === "No-Bid" ? "red" : "slate"}>{bid.status}</Badge></td><td><div className="flex gap-2"><button onClick={() => setEditingId(editingId === bid.id ? "" : bid.id)} className="rounded-md border px-2 py-1 text-xs font-semibold">Edit</button><button onClick={() => archive(bid)} className="rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700">Delete</button></div></td></tr>)}</tbody></table></div> : <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center"><p className="font-serif text-xl font-semibold">No bid opportunities yet</p><p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Add opportunities manually as soon as a buyer sends a bid invite or portal listing.</p></div>}
+      {bids.length ? <div className="table-shell overflow-x-auto"><table><thead><tr><th>Project</th><th>Company</th><th>Scope</th><th>Due</th><th>Value</th><th>Weighted</th><th>Status</th><th>Actions</th></tr></thead><tbody>{bids.map((bid) => {
+        const company = companies.find((item) => item.company_id === bid.company_id || item.company_name === bid.company);
+        return <tr key={bid.id} onClick={() => router.push(`/bids/${bid.id}`)} className="cursor-pointer hover:bg-slate-50">
+          <td className="font-semibold text-ink"><Link onClick={(event) => event.stopPropagation()} href={`/bids/${bid.id}`} className="hover:text-brand hover:underline">{bid.project || "Unnamed opportunity"}</Link><p className="text-xs text-slate-400">{bid.location || "Not added yet"}</p></td>
+          <td>{company ? <Link onClick={(event) => event.stopPropagation()} href={`/companies/${company.company_id}`} className="font-semibold text-brand hover:underline">{company.company_name}</Link> : bid.company || "Not added yet"}</td>
+          <td>{bid.type || "Not added yet"}</td><td>{bid.due || "Not added yet"}</td><td>${bid.value.toLocaleString()}</td><td>${Math.round(bid.value * (bid.probability / 100)).toLocaleString()}</td><td><Badge tone={bid.status === "Submitted" ? "blue" : isOpenBid(bid.status) ? "green" : bid.status === "Lost" || bid.status === "No-Bid" ? "red" : "slate"}>{bid.status}</Badge></td>
+          <td><div className="flex gap-2"><button onClick={(event) => { event.stopPropagation(); setEditingId(editingId === bid.id ? "" : bid.id); }} className="rounded-md border px-2 py-1 text-xs font-semibold">Edit</button><button onClick={(event) => { event.stopPropagation(); archive(bid); }} className="rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700">Delete</button></div></td>
+        </tr>;
+      })}</tbody></table></div> : <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center"><p className="font-serif text-xl font-semibold">No bid opportunities yet</p><p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Add opportunities manually as soon as a buyer sends a bid invite or portal listing.</p></div>}
       {editingId && bids.filter((bid) => bid.id === editingId).map((bid) => (
         <form key={bid.id} onSubmit={(event) => saveEdit(event, bid)} className="card mt-5 grid gap-3 p-5 md:grid-cols-3">
           <h2 className="font-serif text-xl font-semibold md:col-span-3">Edit bid</h2>
