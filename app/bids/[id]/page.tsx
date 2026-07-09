@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
+import { bidResults, weightedBidValue } from "@/lib/bid-utils";
 import { bidStatuses, useFabLeadStore } from "@/lib/local-store";
 import { Bid } from "@/lib/types";
 
@@ -30,7 +31,7 @@ export default function BidDetailPage() {
   const company = companies.find((item) => item.company_id === activeBid.company_id || item.company_name === activeBid.company);
   const contact = contacts.find((item) => item.contact_id === activeBid.contact_id);
   const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : activeBid.contact || "";
-  const weightedValue = Math.round(activeBid.value * (activeBid.probability / 100));
+  const weightedValue = weightedBidValue(activeBid);
   const relatedOutreach = outreachLogs.filter((log) => (company && log.company_id === company.company_id) || (contact && log.contact_id === contact.contact_id));
   const relatedFollowUps = followUps.filter((followUp) => (company && followUp.company_id === company.company_id) || (contact && followUp.contact_id === contact.contact_id));
 
@@ -48,9 +49,13 @@ export default function BidDetailPage() {
       contact: nextContact ? `${nextContact.first_name} ${nextContact.last_name}`.trim() : "",
       type: String(form.get("type") || "Miscellaneous Metals"),
       due: String(form.get("due") || ""),
+      submitted_date: String(form.get("submitted_date") || ""),
+      result_date: String(form.get("result_date") || ""),
       value: Number(form.get("value") || 0),
+      final_submitted_value: Number(form.get("final_submitted_value") || 0),
       probability: Number(form.get("probability") || 25),
       status: String(form.get("status") || "Found"),
+      result: String(form.get("result") || "Pending"),
       location: String(form.get("location") || ""),
       source_url: String(form.get("source_url") || ""),
       notes: String(form.get("notes") || ""),
@@ -113,10 +118,14 @@ export default function BidDetailPage() {
     ["Location", value(activeBid.location)],
     ["Scope", value(activeBid.type)],
     ["Due date", value(activeBid.due)],
+    ["Submitted date", value(activeBid.submitted_date)],
+    ["Result date", value(activeBid.result_date)],
     ["Estimated value", `$${activeBid.value.toLocaleString()}`],
+    ["Final submitted value", `$${Number(activeBid.final_submitted_value || 0).toLocaleString()}`],
     ["Probability", `${activeBid.probability}%`],
     ["Weighted value", `$${weightedValue.toLocaleString()}`],
     ["Status", activeBid.status || "Not added yet"],
+    ["Result", activeBid.result || "Pending"],
     ["Source link", activeBid.source_url ? <a className="font-semibold text-brand hover:underline" href={activeBid.source_url} target="_blank" rel="noreferrer">Open source <ExternalLink size={13} className="inline" /></a> : "Not added yet"],
     ["Notes", value(activeBid.notes)],
   ] as const;
@@ -150,9 +159,13 @@ export default function BidDetailPage() {
           <input name="type" className="field" placeholder="Scope" defaultValue={activeBid.type || "Miscellaneous Metals"} />
           <input name="location" className="field" placeholder="Project location" defaultValue={activeBid.location} />
           <input name="due" className="field" type="date" defaultValue={activeBid.due} />
+          <input name="submitted_date" className="field" type="date" defaultValue={activeBid.submitted_date} />
+          <input name="result_date" className="field" type="date" defaultValue={activeBid.result_date} />
           <input name="value" className="field" placeholder="Estimated value" type="number" min="0" defaultValue={activeBid.value} />
+          <input name="final_submitted_value" className="field" placeholder="Final submitted value" type="number" min="0" defaultValue={activeBid.final_submitted_value} />
           <input name="probability" className="field" placeholder="Probability" type="number" min="0" max="100" defaultValue={activeBid.probability || 25} />
           <select name="status" className="field" defaultValue={activeBid.status || "Found"}>{bidStatuses.map((status) => <option key={status}>{status}</option>)}</select>
+          <select name="result" className="field" defaultValue={activeBid.result || "Pending"}>{bidResults.map((result) => <option key={result}>{result}</option>)}</select>
           <input name="source_url" className="field md:col-span-2" placeholder="Source URL" defaultValue={activeBid.source_url} />
           <textarea name="notes" className="field md:col-span-3" placeholder="Notes" defaultValue={activeBid.notes} />
           <div className="flex gap-2 md:col-span-3"><Button>Save changes</Button><button type="button" onClick={() => setEditing(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button></div>

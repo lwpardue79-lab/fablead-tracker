@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, CalendarCheck, ChartNoAxesCombined, ClipboardList, ClipboardCheck, Contact, FileText, FileUp, Mail, Settings, Store, UserRound } from "lucide-react";
+import { Building2, CalendarCheck, ChartNoAxesCombined, ClipboardList, ClipboardCheck, Contact, FileText, FileUp, Mail, Settings, Store, UserRound, BarChart3 } from "lucide-react";
 import { useFabLeadStore } from "@/lib/local-store";
 
 const links = [
   ["/", "Dashboard", ChartNoAxesCombined], ["/companies", "Companies", Building2], ["/contacts", "Contacts", Contact],
   ["/outreach", "Outreach", Mail], ["/bids", "Bids", ClipboardList], ["/follow-ups", "Follow-Ups", CalendarCheck],
-  ["/shop-profile", "Shop Profile", Store], ["/capability", "Capability", FileText], ["/reports", "Reports", ClipboardCheck],
+  ["/shop-profile", "Shop Profile", Store], ["/capability", "Capability", FileText], ["/bid-reports", "Bid Reports", BarChart3], ["/reports", "Reports", ClipboardCheck],
   ["/pilot", "Pilot Test", ClipboardCheck], ["/import-export", "Import / Export", FileUp], ["/login", "Login", UserRound], ["/settings", "Settings", Settings],
 ] as const;
 

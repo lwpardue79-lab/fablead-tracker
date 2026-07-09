@@ -7,7 +7,7 @@ import { createClient } from "./supabase/client";
 import { Bid, Company, Contact, DeletedItem, FollowUp, OutreachLog, ShopProfile, WorkspaceSettings } from "./types";
 
 export const companyStatuses = ["New", "Contacted", "Qualified", "Registered", "Bid Invite Received", "Customer", "Not Fit", "Archived"];
-export const bidStatuses = ["Found", "Reviewing", "Bidding", "Submitted", "Won", "Lost", "No-Bid", "Archived"];
+export const bidStatuses = ["Found", "Reviewing", "Bidding", "Submitted", "Won", "Lost", "No-Bid", "Canceled", "Archived"];
 export const followUpStatuses = ["Open", "Completed", "Snoozed", "Canceled", "Archived"];
 export const contactTypes = ["estimating", "procurement", "prequalification", "project manager", "owner/executive", "general office", "unknown"];
 export const outreachTypes: OutreachLog["type"][] = ["Call", "Email", "Meeting", "Portal Registration", "Note", "Other"];
@@ -190,6 +190,7 @@ function toSupabaseContact(contact: Contact, workspaceId: string) {
 
 function fromSupabaseBid(row: Record<string, any>, companies: Company[], contacts: Contact[]): Bid {
   const contact = contacts.find((item) => item.contact_id === row.contact_id);
+  const status = row.bid_status === "Cancelled" ? "Canceled" : row.bid_status || "Found";
   return {
     id: row.bid_id,
     company_id: row.company_id,
@@ -200,11 +201,16 @@ function fromSupabaseBid(row: Record<string, any>, companies: Company[], contact
     type: row.scope || row.project_type || "",
     value: Number(row.estimated_value || 0),
     due: row.bid_due_date || "",
-    status: row.bid_status || "Found",
+    submitted_date: row.submitted_date || "",
+    result_date: row.result_date || "",
+    final_submitted_value: Number(row.final_submitted_value || 0),
+    status,
+    result: row.result || (["Won", "Lost", "No-Bid", "Canceled"].includes(status) ? status : "Pending"),
     probability: Number(row.probability_to_win || 0),
     source_url: row.source_link || "",
     location: row.location || "",
     notes: row.notes || "",
+    created_at: row.created_at?.slice?.(0, 10) || "",
     deleted_at: row.deleted_at || "",
   };
 }
@@ -242,6 +248,37 @@ function fromSupabaseOutreach(row: Record<string, any>, companies: Company[], co
     nextFollowUpDate: row.next_follow_up_date || "",
     deleted_at: row.deleted_at || "",
   };
+}
+
+function bidStatusForSupabase(status?: string, legacy = false) {
+  if (legacy && status === "Canceled") return "Cancelled";
+  return status || "Found";
+}
+
+function supabaseBidPayload(bid: Bid, workspaceId?: string, legacy = false) {
+  const payload: Record<string, any> = {
+    ...(workspaceId ? { workspace_id: workspaceId, bid_id: bid.id } : {}),
+    company_id: bid.company_id,
+    contact_id: bid.contact_id || null,
+    project_name: bid.project,
+    scope: bid.type,
+    location: bid.location,
+    estimated_value: bid.value,
+    bid_due_date: bid.due || null,
+    submitted_date: bid.submitted_date || null,
+    bid_status: bidStatusForSupabase(bid.status, legacy),
+    result: bid.result || "Pending",
+    probability_to_win: bid.probability,
+    source_link: bid.source_url,
+    notes: bid.notes,
+  };
+  if (!legacy) {
+    payload.final_submitted_value = bid.final_submitted_value || null;
+    payload.result_date = bid.result_date || null;
+  }
+  if (bid.deleted_at) payload.deleted_at = bid.deleted_at;
+  if (workspaceId) payload.created_at = bid.created_at || isoNow();
+  return payload;
 }
 
 function cloneLaunchDataForWorkspace() {
@@ -590,13 +627,17 @@ export function useFabLeadStore() {
       const bid = { ...input, id: makeId("bid"), company_id: input.company_id || company?.company_id, company: input.company || company?.company_name || "Unknown buyer" };
       setAllBids((current) => [bid, ...current]);
       const supabase = supabaseClient();
-      if (supabase && workspaceId && bid.company_id) supabase.from("bid_opportunities").insert({ workspace_id: workspaceId, bid_id: bid.id, company_id: bid.company_id, contact_id: bid.contact_id || null, project_name: bid.project, scope: bid.type, location: bid.location, estimated_value: bid.value, bid_due_date: bid.due || null, bid_status: bid.status, probability_to_win: bid.probability, source_link: bid.source_url, notes: bid.notes }).then(() => undefined);
+      if (supabase && workspaceId && bid.company_id) supabase.from("bid_opportunities").insert(supabaseBidPayload(bid, workspaceId)).then(({ error }) => {
+        if (error) supabase.from("bid_opportunities").insert(supabaseBidPayload(bid, workspaceId, true)).then(() => undefined);
+      });
       return bid;
     },
     updateBid(next: Bid) {
       setAllBids((current) => current.map((bid) => bid.id === next.id ? next : bid));
       const supabase = supabaseClient();
-      if (supabase && workspaceId) supabase.from("bid_opportunities").update({ company_id: next.company_id, contact_id: next.contact_id || null, project_name: next.project, scope: next.type, location: next.location, estimated_value: next.value, bid_due_date: next.due || null, bid_status: next.status, probability_to_win: next.probability, source_link: next.source_url, notes: next.notes, deleted_at: next.deleted_at || null }).eq("bid_id", next.id).then(() => undefined);
+      if (supabase && workspaceId) supabase.from("bid_opportunities").update({ ...supabaseBidPayload(next), deleted_at: next.deleted_at || null }).eq("bid_id", next.id).then(({ error }) => {
+        if (error) supabase.from("bid_opportunities").update({ ...supabaseBidPayload(next, undefined, true), deleted_at: next.deleted_at || null }).eq("bid_id", next.id).then(() => undefined);
+      });
     },
     archiveBid(bidId: string) {
       archiveRecord("bid", bidId);

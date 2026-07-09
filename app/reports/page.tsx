@@ -3,6 +3,8 @@
 import { Download } from "lucide-react";
 import { PageHeader } from "@/components/ui";
 import { useFabLeadStore } from "@/lib/local-store";
+import { bidDateFields, bidMetrics, bidYears, filterBids, type BidDateField } from "@/lib/bid-utils";
+import { useMemo, useState } from "react";
 
 function downloadCsv(rows: string[]) {
   const anchor = document.createElement("a");
@@ -14,6 +16,8 @@ function downloadCsv(rows: string[]) {
 
 export default function ReportsPage() {
   const { bids, companies, contacts, followUps, outreachLogs } = useFabLeadStore();
+  const [bidYear, setBidYear] = useState("Current year");
+  const [bidDateField, setBidDateField] = useState<BidDateField>("due");
   const now = new Date();
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - now.getDay());
@@ -30,16 +34,20 @@ export default function ReportsPage() {
     ...companies.filter((company) => company.next_action && company.next_action_due_date && company.next_action_due_date <= nextWeekDate).map((company) => `${company.company_name}: ${company.next_action} (${company.next_action_due_date})`),
   ].slice(0, 8);
 
+  const filteredBids = useMemo(() => filterBids(bids, { year: bidYear, preset: "All time", dateField: bidDateField }), [bids, bidYear, bidDateField]);
+  const bidReportMetrics = useMemo(() => bidMetrics(filteredBids), [filteredBids]);
+  const years = useMemo(() => bidYears(bids), [bids]);
+
   const metrics = [
     ["Companies contacted this week", contactedCompanyNames.size],
     ["Follow-ups completed", followUps.filter((followUp) => followUp.status === "Completed").length],
     ["Overdue follow-ups", followUps.filter((followUp) => followUp.status !== "Completed" && followUp.due && followUp.due < today).length],
     ["New contacts added", contacts.filter((contact) => (contact.next_follow_up_at || "") >= thisWeek).length],
     ["Bid-list registrations completed", outreachLogs.filter((log) => log.type === "Portal Registration" && log.date >= thisWeek).length + companies.filter((company) => company.lead_status === "Registered").length],
-    ["Bid opportunities added", bids.filter((bid) => bid.status === "Found" || bid.status === "Reviewing").length],
+    ["Bid opportunities added", filteredBids.filter((bid) => bid.status === "Found" || bid.status === "Reviewing").length],
     ["Bid invites received", companies.filter((company) => company.lead_status === "Bid Invite Received").length],
-    ["Bids submitted", bids.filter((bid) => bid.status === "Submitted").length],
-    ["Won/Lost/No-Bid results", bids.filter((bid) => ["Won", "Lost", "No-Bid"].includes(bid.status)).length],
+    ["Bids submitted", filteredBids.filter((bid) => bid.status === "Submitted").length],
+    ["Won/Lost/No-Bid results", filteredBids.filter((bid) => ["Won", "Lost", "No-Bid"].includes(bid.status)).length],
   ] as const;
 
   function exportReport() {
@@ -49,6 +57,11 @@ export default function ReportsPage() {
   return (
     <>
       <PageHeader eyebrow="Owner reporting" title="Weekly Owner Report" description="A simple snapshot of business development activity and what needs to happen next." action={<button onClick={exportReport} className="rounded-xl bg-steel px-4 py-2.5 text-sm font-semibold text-white"><span className="flex items-center gap-2"><Download size={15} />Export CSV</span></button>} />
+      <section className="card mb-5 grid gap-3 p-4 md:grid-cols-3">
+        <label className="text-xs font-semibold text-slate-600">Bid year<select className="field mt-1.5" value={bidYear} onChange={(event) => setBidYear(event.target.value)}><option>All years</option><option>Current year</option><option>Previous year</option>{years.map((year) => <option key={year}>{year}</option>)}</select></label>
+        <label className="text-xs font-semibold text-slate-600">Bid date basis<select className="field mt-1.5" value={bidDateField} onChange={(event) => setBidDateField(event.target.value as BidDateField)}>{bidDateFields.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <div className="rounded-xl bg-slate-50 p-4 text-sm"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Selected bid period</p><p className="mt-1 font-semibold text-ink">{filteredBids.length} bids · ${bidReportMetrics.totalBidValue.toLocaleString()} pursued · {bidReportMetrics.winRate}% win rate</p></div>
+      </section>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {metrics.map(([label, value]) => <div key={label} className="card p-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-3 text-3xl font-semibold">{value}</p></div>)}
       </section>

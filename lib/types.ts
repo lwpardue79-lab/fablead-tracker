@@ -65,11 +65,16 @@ export type Bid = {
   type: string;
   value: number;
   due: string;
+  submitted_date?: string;
+  result_date?: string;
+  final_submitted_value?: number;
   status: string;
+  result?: string;
   probability: number;
   source_url?: string;
   location?: string;
   notes?: string;
+  created_at?: string;
   deleted_at?: string;
 };
 
