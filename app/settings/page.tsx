@@ -10,6 +10,7 @@ export default function Settings() {
   const { deletedItems, resetPilotData, storageStatus, updateWorkspaceSettings, workspaceSettings } = useFabLeadStore();
   const [settings, setSettings] = useState<WorkspaceSettings>(defaultWorkspaceSettings);
   const [message, setMessage] = useState("");
+  const databaseMode = storageStatus === "Database connected" || storageStatus === "Database configured — sign in required";
 
   useEffect(() => {
     setSettings(workspaceSettings);
@@ -26,6 +27,10 @@ export default function Settings() {
   }
 
   function resetData() {
+    if (databaseMode) {
+      setMessage("Pilot reset is disabled in database mode to protect real Shawnee Steel records.");
+      return;
+    }
     resetPilotData();
     setSettings(defaultWorkspaceSettings);
     setMessage("Pilot data and workspace settings reset to Shawnee Steel & Welding.");
@@ -50,7 +55,7 @@ export default function Settings() {
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             <button className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Save settings</button>
-            <button type="button" onClick={resetData} className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50">Reset pilot data</button>
+            <button type="button" onClick={resetData} disabled={databaseMode} className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">Reset pilot data</button>
           </div>
         </form>
         <section className="card p-6">

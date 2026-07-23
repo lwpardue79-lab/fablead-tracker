@@ -2,14 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, CalendarCheck, ChartNoAxesCombined, ClipboardList, ClipboardCheck, Contact, FileText, FileUp, Mail, Settings, Store, UserRound, BarChart3 } from "lucide-react";
+import { Building2, CalendarCheck, ChartNoAxesCombined, ClipboardList, ClipboardCheck, Contact, FileText, FileUp, Settings, Store, BarChart3 } from "lucide-react";
 import { useFabLeadStore } from "@/lib/local-store";
 
-const links = [
-  ["/", "Dashboard", ChartNoAxesCombined], ["/companies", "Companies", Building2], ["/contacts", "Contacts", Contact],
-  ["/outreach", "Outreach", Mail], ["/bids", "Bids", ClipboardList], ["/follow-ups", "Follow-Ups", CalendarCheck],
-  ["/shop-profile", "Shop Profile", Store], ["/capability", "Capability", FileText], ["/bid-reports", "Bid Reports", BarChart3], ["/reports", "Reports", ClipboardCheck],
-  ["/pilot", "Pilot Test", ClipboardCheck], ["/import-export", "Import / Export", FileUp], ["/login", "Login", UserRound], ["/settings", "Settings", Settings],
+const primaryLinks = [
+  ["/", "Dashboard", ChartNoAxesCombined],
+  ["/companies", "Companies", Building2],
+  ["/contacts", "Contacts", Contact],
+  ["/bids", "Bids", ClipboardList],
+  ["/follow-ups", "Tasks", CalendarCheck],
+  ["/reports", "Reports", ClipboardCheck],
+] as const;
+
+const moreLinks = [
+  ["/bid-reports", "Bid Reports", BarChart3],
+  ["/shop-profile", "Shop Profile", Store],
+  ["/capability", "Capability Materials", FileText],
+  ["/import-export", "Import / Export", FileUp],
+  ["/settings", "Settings", Settings],
 ] as const;
 
 export function Sidebar() {
@@ -24,7 +34,13 @@ export function Sidebar() {
       </div>
       <div><p className="font-serif text-lg font-semibold leading-none">FabLead</p><p className="mt-1 text-[10px] font-bold uppercase tracking-[.2em] text-blue-200/70">Tracker</p></div>
     </div>
-    <nav className="flex-1 space-y-1 px-3 py-6">{links.map(([href, label, Icon]) => { const active = href === "/" ? path === "/" : path.startsWith(href); return <Link key={href} href={href} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${active ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"}`}><Icon size={17}/>{label}</Link>; })}</nav>
-    <div className="m-4 rounded-2xl border border-white/10 bg-white/5 p-4"><p className="text-xs font-semibold">Live workspace</p><p className="mt-1 text-xs leading-relaxed text-white/45">{companies.length} companies · {contacts.length} contacts · publish-ready</p><div className="mt-3 h-1.5 rounded-full bg-white/10"><div className="h-full w-3/5 rounded-full bg-brand"/></div></div>
-  </aside><nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-black/10 bg-steel px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 text-white shadow-2xl lg:hidden">{links.map(([href,label,Icon])=>{const active=href==="/"?path==="/":path.startsWith(href);return <Link key={href} href={href} className={`flex min-w-[76px] flex-1 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold ${active?"bg-white/10 text-white":"text-white/55"}`}><Icon size={16}/><span className="whitespace-nowrap">{label.replace("Import / Export","Import")}</span></Link>})}</nav></>;
+    <nav className="flex-1 space-y-5 px-3 py-6">
+      <div className="space-y-1">{primaryLinks.map(([href, label, Icon]) => { const active = href === "/" ? path === "/" : path.startsWith(href); return <Link key={href} href={href} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${active ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"}`}><Icon size={17}/>{label}</Link>; })}</div>
+      <div>
+        <p className="px-3 text-[10px] font-bold uppercase tracking-[.2em] text-white/35">More</p>
+        <div className="mt-2 space-y-1">{moreLinks.map(([href, label, Icon]) => { const active = path.startsWith(href); return <Link key={href} href={href} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${active ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"}`}><Icon size={17}/>{label}</Link>; })}</div>
+      </div>
+    </nav>
+    <div className="m-4 rounded-2xl border border-white/10 bg-white/5 p-4"><p className="text-xs font-semibold">Live workspace</p><p className="mt-1 text-xs leading-relaxed text-white/45">{companies.length} companies · {contacts.length} contacts</p><div className="mt-3 h-1.5 rounded-full bg-white/10"><div className="h-full w-3/5 rounded-full bg-brand"/></div></div>
+  </aside><nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-black/10 bg-steel px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 text-white shadow-2xl lg:hidden">{[...primaryLinks, ...moreLinks].map(([href,label,Icon])=>{const active=href==="/"?path==="/":path.startsWith(href);return <Link key={href} href={href} className={`flex min-w-[76px] flex-1 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-semibold ${active?"bg-white/10 text-white":"text-white/55"}`}><Icon size={16}/><span className="whitespace-nowrap">{label.replace("Import / Export","Import").replace("Capability Materials","Capability")}</span></Link>})}</nav></>;
 }

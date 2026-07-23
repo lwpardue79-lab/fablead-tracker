@@ -2,13 +2,12 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { Badge, PageHeader } from "@/components/ui";
+import { addChicagoDays, dueBucket, isOverdue } from "@/lib/date-logic";
 import { followUpStatuses, useFabLeadStore } from "@/lib/local-store";
 import { FollowUp } from "@/lib/types";
 
 function addDays(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addChicagoDays(days);
 }
 
 export default function FollowUps() {
@@ -17,9 +16,8 @@ export default function FollowUps() {
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
 
-  const today = new Date().toISOString().slice(0, 10);
   const openFollowUps = followUps.filter((item) => item.status === "Open" || item.status === "Snoozed");
-  const dueNow = openFollowUps.filter((item) => item.due && item.due <= today).length;
+  const dueNow = openFollowUps.filter((item) => ["Overdue", "Due Today"].includes(dueBucket({ due: item.due, status: item.status }))).length;
   const completed = followUps.filter((item) => item.status === "Completed").length;
 
   const sortedFollowUps = useMemo(() => {
@@ -110,7 +108,7 @@ export default function FollowUps() {
       <div className="card divide-y divide-slate-100">
         {sortedFollowUps.map((followUp) => {
           const isDone = followUp.status === "Completed";
-          const overdue = followUp.status !== "Completed" && followUp.due && followUp.due < today;
+          const overdue = isOverdue({ due: followUp.due, status: followUp.status });
           return (
             <div key={followUp.id} className={`grid gap-3 p-5 md:grid-cols-[1fr_auto] ${isDone ? "opacity-50" : overdue ? "bg-red-50/70" : ""}`}>
               <div>

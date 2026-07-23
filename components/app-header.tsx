@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useFabLeadStore } from "@/lib/local-store";
+import { createClient } from "@/lib/supabase/client";
 
 function initials(name: string) {
   return name
@@ -14,6 +17,22 @@ function initials(name: string) {
 export function AppHeader() {
   const { companies, contacts, workspaceSettings } = useFabLeadStore();
   const companyName = workspaceSettings.companyName || "Shawnee Steel & Welding";
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    const supabase = createClient();
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email || ""));
+  }, []);
+
+  async function logout() {
+    const supabase = createClient();
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/85 px-5 backdrop-blur lg:px-8">
@@ -22,9 +41,10 @@ export function AppHeader() {
       <div className="flex items-center gap-3">
         <div className="hidden text-right sm:block">
           <p className="text-xs font-semibold">{companyName}</p>
-          <p className="text-[11px] text-slate-400">Business development</p>
+          <p className="text-[11px] text-slate-400">{email || "Business development"}</p>
         </div>
         <div className="grid size-9 place-items-center rounded-full bg-steel text-xs font-bold text-white ring-2 ring-brand/15">{initials(companyName)}</div>
+        {email && <button onClick={logout} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">Logout</button>}
       </div>
     </header>
   );

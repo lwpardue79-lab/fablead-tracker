@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, Building2, CalendarClock, CircleDollarSign, Target, TrendingUp, Users } from "lucide-react";
 import { Badge, PageHeader } from "@/components/ui";
+import { chicagoDate, isOverdue } from "@/lib/date-logic";
 import { useFabLeadStore } from "@/lib/local-store";
 
 function isOpenBid(status: string) {
@@ -11,10 +12,10 @@ function isOpenBid(status: string) {
 
 export default function Dashboard() {
   const { bids, companies, contacts, followUps, workspaceSettings } = useFabLeadStore();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = chicagoDate();
   const openFollowUps = followUps.filter((followUp) => followUp.status === "Open" || followUp.status === "Snoozed");
   const openBids = bids.filter((bid) => isOpenBid(bid.status));
-  const overdueFollowUps = openFollowUps.filter((followUp) => followUp.due && followUp.due < today);
+  const overdueFollowUps = openFollowUps.filter((followUp) => isOverdue({ due: followUp.due, status: followUp.status }));
   const overdueCompanyActions = companies.filter((company) => company.next_action_due_date && company.next_action_due_date < today);
   const averageScore = companies.length ? Math.round(companies.reduce((sum, company) => sum + company.lead_score, 0) / companies.length) : 0;
   const registeredCompanies = companies.filter((company) => company.lead_status === "Registered").length;
@@ -84,7 +85,7 @@ export default function Dashboard() {
           <div className="divide-y divide-slate-100">
             {openFollowUps.slice(0, 5).map((followUp) => (
               <div key={followUp.id} className="p-5">
-                <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{followUp.task}</p><p className="mt-1 text-xs text-slate-400">{followUp.company} · {followUp.contact}</p></div><Badge tone={followUp.due && followUp.due < today ? "red" : followUp.priority === "High" ? "orange" : "slate"}>{followUp.due || followUp.priority}</Badge></div>
+                <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{followUp.task}</p><p className="mt-1 text-xs text-slate-400">{followUp.company} · {followUp.contact}</p></div><Badge tone={isOverdue({ due: followUp.due, status: followUp.status }) ? "red" : followUp.priority === "High" ? "orange" : "slate"}>{followUp.due || followUp.priority}</Badge></div>
               </div>
             ))}
             {!openFollowUps.length && <div className="p-8 text-center text-sm text-slate-500">No open follow-ups. Add one after your next buyer call.</div>}

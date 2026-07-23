@@ -1,9 +1,10 @@
 "use client";
 
 import { Download } from "lucide-react";
-import { PageHeader } from "@/components/ui";
+import Link from "next/link";
+import { Badge, PageHeader } from "@/components/ui";
 import { useFabLeadStore } from "@/lib/local-store";
-import { bidDateFields, bidMetrics, bidYears, filterBids, type BidDateField } from "@/lib/bid-utils";
+import { bidDateFields, bidMetrics, bidYears, currentBidStatuses, filterBids, pastBidStatuses, weightedBidValue, type BidDateField } from "@/lib/bid-utils";
 import { useMemo, useState } from "react";
 
 function downloadCsv(rows: string[]) {
@@ -69,6 +70,34 @@ export default function ReportsPage() {
         <h2 className="font-serif text-xl font-semibold">Next week’s top priorities</h2>
         <div className="mt-4 space-y-2">
           {nextPriorities.length ? nextPriorities.map((priority) => <div key={priority} className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">{priority}</div>) : <p className="text-sm text-slate-500">No urgent priorities scheduled. Add next actions on Companies or Follow-Ups.</p>}
+        </div>
+      </section>
+      <section className="card mt-6 p-6">
+        <div className="flex flex-col justify-between gap-2 md:flex-row md:items-end">
+          <div>
+            <h2 className="font-serif text-xl font-semibold">Bid records in this report period</h2>
+            <p className="mt-1 text-sm text-slate-500">Past bids are still editable. Open a bid to update result, submitted value, dates, notes, or status.</p>
+          </div>
+          <Link href="/bid-reports" className="text-sm font-bold text-brand hover:underline">Open full bid reports</Link>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table>
+            <thead><tr><th>Project</th><th>Company</th><th>Due</th><th>Submitted</th><th>Value</th><th>Weighted</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              {filteredBids.length ? filteredBids.slice(0, 12).map((bid) => (
+                <tr key={bid.id} className="hover:bg-slate-50">
+                  <td className="font-semibold text-ink"><Link href={`/bids/${bid.id}`} className="hover:text-brand hover:underline">{bid.project || "Unnamed opportunity"}</Link><p className="text-xs text-slate-400">{bid.type || "Not added yet"}</p></td>
+                  <td>{bid.company || "Not added yet"}</td>
+                  <td>{bid.due || "Not added yet"}</td>
+                  <td>{bid.submitted_date || "Not added yet"}</td>
+                  <td>${Number(bid.value || 0).toLocaleString()}</td>
+                  <td>${weightedBidValue(bid).toLocaleString()}</td>
+                  <td><Badge tone={currentBidStatuses.includes(bid.status) ? "green" : pastBidStatuses.includes(bid.status) ? "slate" : "blue"}>{bid.status || "Not added yet"}</Badge></td>
+                  <td><Link href={`/bids/${bid.id}`} className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-white">Open/Edit</Link></td>
+                </tr>
+              )) : <tr><td colSpan={8}>No bid records match this report period.</td></tr>}
+            </tbody>
+          </table>
         </div>
       </section>
       <section className="card mt-6 p-6">

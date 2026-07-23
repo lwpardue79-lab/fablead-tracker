@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Download } from "lucide-react";
-import { PageHeader } from "@/components/ui";
-import { bidDateFields, bidMetrics, bidResults, bidYears, filterBids, groupBidValue, type BidDateField, type BidPreset } from "@/lib/bid-utils";
+import { Badge, PageHeader } from "@/components/ui";
+import { bidDateFields, bidMetrics, bidResults, bidYears, currentBidStatuses, filterBids, groupBidValue, pastBidStatuses, weightedBidValue, type BidDateField, type BidPreset } from "@/lib/bid-utils";
 import { bidStatuses, useFabLeadStore } from "@/lib/local-store";
 
 const presets: BidPreset[] = ["This week", "This month", "This quarter", "Year to date", "Last year", "All time", "Custom date range"];
@@ -115,6 +116,40 @@ export default function BidReportsPage() {
         <SummaryTable title="Bids by month" rows={byMonth} />
         <SummaryTable title="Bids by scope" rows={byScope} />
       </div>
+
+      <section className="card mt-6 p-5">
+        <div className="flex flex-col justify-between gap-2 md:flex-row md:items-end">
+          <div>
+            <h2 className="font-serif text-lg font-semibold">Filtered bid records</h2>
+            <p className="mt-1 text-sm text-slate-500">Open any current or past bid to edit details, status, result dates, and values.</p>
+          </div>
+          <Link href="/bids" className="text-sm font-bold text-brand hover:underline">Manage all bids</Link>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table>
+            <thead><tr><th>Project</th><th>Company</th><th>Scope</th><th>Due</th><th>Submitted</th><th>Value</th><th>Weighted</th><th>Status</th><th>Result</th><th>Action</th></tr></thead>
+            <tbody>
+              {filteredBids.length ? filteredBids.map((bid) => {
+                const companyRecord = companies.find((item) => item.company_id === bid.company_id || item.company_name === bid.company);
+                return (
+                  <tr key={bid.id} className="hover:bg-slate-50">
+                    <td className="font-semibold text-ink"><Link href={`/bids/${bid.id}`} className="hover:text-brand hover:underline">{bid.project || "Unnamed opportunity"}</Link><p className="text-xs text-slate-400">{bid.location || "Not added yet"}</p></td>
+                    <td>{companyRecord ? <Link href={`/companies/${companyRecord.company_id}`} className="font-semibold text-brand hover:underline">{companyRecord.company_name}</Link> : bid.company || "Not added yet"}</td>
+                    <td>{bid.type || "Not added yet"}</td>
+                    <td>{bid.due || "Not added yet"}</td>
+                    <td>{bid.submitted_date || "Not added yet"}</td>
+                    <td>{money(Number(bid.value || 0))}</td>
+                    <td>{money(weightedBidValue(bid))}</td>
+                    <td><Badge tone={currentBidStatuses.includes(bid.status) ? "green" : pastBidStatuses.includes(bid.status) ? "slate" : "blue"}>{bid.status || "Not added yet"}</Badge></td>
+                    <td>{bid.result || "Pending"}</td>
+                    <td><Link href={`/bids/${bid.id}`} className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-white">Open/Edit</Link></td>
+                  </tr>
+                );
+              }) : <tr><td colSpan={10}>No bid records match these filters.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </>
   );
 }

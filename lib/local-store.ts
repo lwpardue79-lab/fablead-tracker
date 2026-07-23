@@ -326,18 +326,26 @@ function cloneLaunchDataForWorkspace() {
 }
 
 export function useFabLeadStore() {
-  const [allCompanies, setAllCompanies] = useState<Company[]>(seedCompanies);
-  const [allContacts, setAllContacts] = useState<Contact[]>(seedContacts);
-  const [allBids, setAllBids] = useState<Bid[]>(seedBids);
-  const [allFollowUps, setAllFollowUps] = useState<FollowUp[]>(seedFollowUps);
+  const [allCompanies, setAllCompanies] = useState<Company[]>([]);
+  const [allContacts, setAllContacts] = useState<Contact[]>([]);
+  const [allBids, setAllBids] = useState<Bid[]>([]);
+  const [allFollowUps, setAllFollowUps] = useState<FollowUp[]>([]);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(defaultWorkspaceSettings);
   const [shopProfile, setShopProfile] = useState<ShopProfile>(defaultShopProfile);
   const [allOutreachLogs, setAllOutreachLogs] = useState<OutreachLog[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string>("");
   const [supabaseConfigured, setSupabaseConfigured] = useState(false);
+  const [browserFallbackMode, setBrowserFallbackMode] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    if (createClient()) {
+      setBrowserFallbackMode(false);
+      setLoaded(true);
+      return;
+    }
+
+    setBrowserFallbackMode(true);
     const normalizedCompanies = readLocal(keys.companies, seedCompanies).map((company) => ({
       ...company,
       next_action: company.next_action || "Request bid-list or prequalification path",
@@ -433,16 +441,29 @@ export function useFabLeadStore() {
     }
 
     loadSupabaseWorkspace();
-    return () => { active = false; };
+
+    const channel = supabase
+      .channel("workspace-record-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "companies" }, loadSupabaseWorkspace)
+      .on("postgres_changes", { event: "*", schema: "public", table: "contacts" }, loadSupabaseWorkspace)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bid_opportunities" }, loadSupabaseWorkspace)
+      .on("postgres_changes", { event: "*", schema: "public", table: "follow_ups" }, loadSupabaseWorkspace)
+      .on("postgres_changes", { event: "*", schema: "public", table: "outreach_logs" }, loadSupabaseWorkspace)
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  useEffect(() => { if (loaded) writeLocal(keys.companies, allCompanies); }, [allCompanies, loaded]);
-  useEffect(() => { if (loaded) writeLocal(keys.contacts, allContacts); }, [allContacts, loaded]);
-  useEffect(() => { if (loaded) writeLocal(keys.bids, allBids); }, [allBids, loaded]);
-  useEffect(() => { if (loaded) writeLocal(keys.followUps, allFollowUps); }, [allFollowUps, loaded]);
-  useEffect(() => { if (loaded) writeLocal(keys.workspaceSettings, workspaceSettings); }, [workspaceSettings, loaded]);
-  useEffect(() => { if (loaded) writeLocal(keys.shopProfile, shopProfile); }, [shopProfile, loaded]);
-  useEffect(() => { if (loaded) writeLocal(keys.outreachLogs, allOutreachLogs); }, [allOutreachLogs, loaded]);
+  useEffect(() => { if (loaded && browserFallbackMode) writeLocal(keys.companies, allCompanies); }, [allCompanies, browserFallbackMode, loaded]);
+  useEffect(() => { if (loaded && browserFallbackMode) writeLocal(keys.contacts, allContacts); }, [allContacts, browserFallbackMode, loaded]);
+  useEffect(() => { if (loaded && browserFallbackMode) writeLocal(keys.bids, allBids); }, [allBids, browserFallbackMode, loaded]);
+  useEffect(() => { if (loaded && browserFallbackMode) writeLocal(keys.followUps, allFollowUps); }, [allFollowUps, browserFallbackMode, loaded]);
+  useEffect(() => { if (loaded && browserFallbackMode) writeLocal(keys.workspaceSettings, workspaceSettings); }, [browserFallbackMode, loaded, workspaceSettings]);
+  useEffect(() => { if (loaded && browserFallbackMode) writeLocal(keys.shopProfile, shopProfile); }, [browserFallbackMode, loaded, shopProfile]);
+  useEffect(() => { if (loaded && browserFallbackMode) writeLocal(keys.outreachLogs, allOutreachLogs); }, [allOutreachLogs, browserFallbackMode, loaded]);
 
   const activeCompanies = allCompanies.filter((company) => !isDeleted(company));
   const activeCompanyIds = new Set(activeCompanies.map((company) => company.company_id));
@@ -551,7 +572,7 @@ export function useFabLeadStore() {
     shopProfile,
     outreachLogs: activeOutreachLogs,
     deletedItems,
-    storageStatus: supabaseConfigured ? (workspaceId ? "Database connected" : "Supabase configured — sign in to sync") : "Browser storage mode",
+    storageStatus: supabaseConfigured ? (workspaceId ? "Database connected" : "Database configured — sign in required") : "Local development fallback — Supabase env vars missing",
     addCompany(input: Omit<Company, "company_id">) {
       const company = { ...input, company_id: makeId("company"), next_action_priority: input.next_action_priority || "Medium" };
       setAllCompanies((current) => [company, ...current]);

@@ -23,7 +23,17 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-Open `http://localhost:3000`. Without environment values the app displays the Kansas City launch dataset. For live data, use the connected Supabase project at `https://xtpqniktirazzsnzfjqu.supabase.co` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Never put a secret/service-role key in a browser environment variable.
+Open `http://localhost:3000`. For production or a real Shawnee Steel pilot, set Supabase environment values and require login. If Supabase environment values are missing, the app falls back to local browser storage for development only.
+
+Required environment variables:
+
+```bash
+NEXT_PUBLIC_APP_URL=https://fablead-tracker.vercel.app
+NEXT_PUBLIC_SUPABASE_URL=https://xtpqniktirazzsnzfjqu.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
+```
+
+Never put a secret/service-role key in a browser environment variable.
 
 For a real company test, open `/pilot` and follow [PILOT_TEST.md](./PILOT_TEST.md).
 Before a one-week pilot, run the manual QA checklist in [MANUAL_QA_CHECKLIST.md](./MANUAL_QA_CHECKLIST.md).
@@ -42,12 +52,78 @@ Set `NEXT_PUBLIC_APP_URL` to the final hosted URL so metadata, sharing previews,
 
 1. Use the connected Supabase project: `https://xtpqniktirazzsnzfjqu.supabase.co`.
 2. Enable email/password authentication in Supabase Auth.
-3. In the SQL editor, run `supabase/migrations/20260630000000_initial_schema.sql`.
-4. Then run `supabase/migrations/20260708000000_internal_crm_upgrade.sql`.
-5. Run `supabase/seed.sql` only if you want the fictional demo records.
-6. Set the two public environment variables, restart or redeploy the app, and sign in at `/login`. The app calls `bootstrap_shawnee_workspace()` to create the Shawnee Steel & Welding workspace for the authenticated user.
+3. Disable unrestricted public signup for production. Create or invite approved Shawnee Steel users from Supabase Auth instead.
+4. Require email confirmation before users can access the app.
+5. In the SQL editor or Supabase CLI, run migrations in timestamp order:
+   - `supabase/migrations/20260630000000_initial_schema.sql`
+   - `supabase/migrations/20260708000000_internal_crm_upgrade.sql`
+   - `supabase/migrations/20260708155943_move_pg_trgm_extension.sql`
+   - `supabase/migrations/20260708162000_pilot_workflow_soft_delete.sql`
+   - `supabase/migrations/20260709134000_bid_reporting_fields.sql`
+   - `supabase/migrations/20260723090000_production_foundation.sql`
+6. Run `supabase/seed.sql` only if you want demo records in a non-production workspace.
+7. Confirm the private `fablead-documents` storage bucket exists. The production foundation migration creates it with workspace-scoped storage policies.
+8. Set the public environment variables in Vercel, restart or redeploy the app, and sign in at `/login`. The app calls `bootstrap_shawnee_workspace()` to create or attach the Shawnee Steel & Welding workspace for the authenticated user.
 
-For Supabase CLI development, initialize/link the project and use the normal migration workflow (`supabase db reset`, then `supabase db push`). The migration explicitly grants Data API access because new Supabase projects no longer expose new public tables automatically. Every exposed table also has RLS enabled.
+For Supabase CLI development, initialize/link the project and use the normal migration workflow (`supabase db reset`, then `supabase db push`). The migrations explicitly grant Data API access because new Supabase projects no longer expose new public tables automatically. Every exposed business table has RLS enabled.
+
+## Authentication, roles, and RLS
+
+Production pages are protected by `proxy.ts` when Supabase environment variables are present. Unauthenticated users are redirected to `/login`.
+
+Application roles:
+
+- Admin
+- Estimator
+- Business Development
+- Read Only
+
+The current RLS foundation uses workspace membership for data isolation and the existing database roles `owner`, `admin`, `member`, and `viewer` for enforcement. Use those membership roles as follows:
+
+- `owner` / `admin`: full workspace access, user administration, imports/exports, deletes/restores, audit logs.
+- `member`: estimator or business-development user who can create and edit records.
+- `viewer`: read-only user.
+
+Do not let users edit their own role from the browser. Role and membership changes should be performed by an admin through Supabase or a future admin UI.
+
+## Data persistence model
+
+Supabase is the production source of truth. Browser storage is only a development fallback when Supabase env vars are missing. In production:
+
+- creates, edits, deletes, restores, status changes, imports, and reports should read/write Supabase;
+- row-level security restricts records to active workspace members;
+- realtime subscriptions refresh common record lists when another user changes companies, contacts, bids, tasks/follow-ups, or outreach logs;
+- soft-deleted records use `deleted_at` and can be restored before permanent deletion.
+
+## Storage and documents
+
+Use Supabase Storage bucket `fablead-documents`.
+
+Recommended storage path format:
+
+```text
+{workspace_id}/{entity_type}/{entity_id}/{version_or_timestamp}-{file_name}
+```
+
+The migration adds policies so authenticated users can only access files under a workspace folder where they are a member. Admin/owner users can delete; member users can upload and update.
+
+## Backup recommendations
+
+- Enable Supabase point-in-time recovery or scheduled backups before using the app as Shawnee Steel’s source of truth.
+- Export companies, contacts, bids, tasks, registrations, and audit logs weekly during the pilot.
+- Keep source documents in Supabase Storage and avoid overwriting proposal versions.
+- Never store portal passwords, payment card data, bank data, or private financial information in FabLead Tracker.
+
+## How Shawnee Steel should use it daily
+
+1. Start on Dashboard and review overdue tasks, bids due this week, and unassigned records.
+2. Add or update companies from public buyer/GC/prequalification sources.
+3. Add contacts and mark estimating, prequalification, project manager, or decision-maker roles.
+4. Log every call, email, meeting, site visit, registration update, and customer reply.
+5. Create follow-up tasks with owners and due dates.
+6. Track every bid invite from received through submitted/won/lost/no-bid.
+7. Upload drawings, specs, addenda, quotes, proposals, W-9s, insurance certificates, and prequalification documents.
+8. Review Weekly Owner Report and Bid Reports during the weekly business-development meeting.
 
 ## CSV import format
 
@@ -81,16 +157,14 @@ app/
 
 ## Production checklist
 
-- Apply both migrations in order before enabling real Supabase login:
-  1. `supabase/migrations/20260630000000_initial_schema.sql`
-  2. `supabase/migrations/20260708000000_internal_crm_upgrade.sql`
+- Apply all migrations in timestamp order before enabling real Supabase login.
 - Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel.
-- Use `/login` to create/sign into an email/password account; the app calls `bootstrap_shawnee_workspace()` to create the Shawnee Steel & Welding workspace and shop profile for the first authenticated user.
+- Create/invite users in Supabase Auth; public self-signup is not exposed in the app.
+- Use `/login` to sign into an email/password account; the app calls `bootstrap_shawnee_workspace()` to create the Shawnee Steel & Welding workspace and shop profile for the first authenticated user.
 - Use `/shop-profile` to tune trade scopes, radius, project size, certifications, and contact info.
 - Use `/capability` for capability statement and outreach email templates.
 - Use `/reports` for the weekly owner report.
-- Add authenticated sign-in and a server-side workspace bootstrap endpoint.
-- Replace the local launch dataset with typed Supabase queries and mutations.
+- Keep browser-storage fallback limited to local development only.
 - Add server-side CSV batch validation, duplicate review, and error download.
 - Add tests for every RLS role (owner, admin, member, viewer, anonymous).
 - Run Supabase database/security advisors after applying migrations.
