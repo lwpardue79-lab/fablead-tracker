@@ -442,8 +442,13 @@ export function useFabLeadStore() {
 
     loadSupabaseWorkspace();
 
+    const channelName =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? `workspace-record-sync-${crypto.randomUUID()}`
+        : `workspace-record-sync-${Date.now()}`;
+
     const channel = supabase
-      .channel("workspace-record-sync")
+      .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "companies" }, loadSupabaseWorkspace)
       .on("postgres_changes", { event: "*", schema: "public", table: "contacts" }, loadSupabaseWorkspace)
       .on("postgres_changes", { event: "*", schema: "public", table: "bid_opportunities" }, loadSupabaseWorkspace)
